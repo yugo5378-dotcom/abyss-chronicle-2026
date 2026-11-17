@@ -1,0 +1,64 @@
+name: Verify card roles in Chromium
+on:
+  push:
+    branches: [card-roles-062]
+    paths: ['.github/workflows/verify-cards-062.yml']
+permissions:
+  contents: write
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -eu
+          git show 30f61581bf90b90addc7b19feb9cce93c81b8e3f^:game.js > original.js
+          python3 -m http.server 8765 > "$RUNNER_TEMP/http.log" 2>&1 &
+          cd "$RUNNER_TEMP"
+          npm install --silent playwright-core@1.55.0
+          cat > verify.cjs <<'JS'
+          const {chromium}=require('playwright-core');
+          (async()=>{
+            const browser=await chromium.launch({executablePath:'/usr/bin/google-chrome',args:['--no-sandbox']});
+            try{
+              const page=await browser.newPage({viewport:{width:390,height:844}});
+              await page.goto('http://localhost:8765');
+              await page.waitForFunction(()=>window.ABYSS);
+              const fixture=await page.evaluate(async()=>{
+                const iframe=document.createElement('iframe'); document.body.append(iframe);
+                iframe.contentDocument.body.innerHTML='<div id="app"></div>';
+                for(const file of ['audio.js','original.js']){const sc=iframe.contentDocument.createElement('script');sc.textContent=await(await fetch('/'+file)).text();iframe.contentDocument.body.append(sc)}
+                const a=iframe.contentWindow.ABYSS;a.newGame('warrior');a.getState().deck.push('v10_r_retreat~u54');a.save();return {cards:a.cards,save:JSON.parse(localStorage.getItem('abyss_chronicle_v01'))}
+              });
+              const out=await page.evaluate((({cards,save:oldSave})=>{
+           function ok(test,msg){if(!test)throw Error(msg)}
+           const all=Object.values(C),keys=Object.keys,changed=all.filter(c=>JSON.stringify(c)!==JSON.stringify(cards[c.id]));
+           ok(all.length===334&&changed.length===27,'changed count '+changed.length);
+           const mixed=all.filter(c=>{const f=c.effect;return (f.block||f.passiveBlock||f.guardBlock||f.paidBlock)&&['hit','aoe','allPoison','poison','bleed','thorns','turnThorns','existingPoison','blockHit','executeHit','detonate'].some(k=>f[k])});
+           ok(mixed.length===4&&mixed.every(c=>c.rarity==='rare')&&new Set(mixed.map(c=>c.cls)).size===4,'mixed');
+           ok(validateSave(oldSave)&&cardDetail('v10_r_retreat~u54').rarity==='rare','old save');let runs=0;
+           function start(){newGame('warrior');beginBattle('elite');const b=S.battle;b.enemies.forEach(e=>{e.hp=e.maxHp=999;e.atk=15;e.intent={kind:'attack',value:15};e.weak=e.vuln=e.block=e.poison=0});S.hp=60;return b}
+           function use(name,up=false){const c=all.find(c=>c.name===name);const b=S.battle;b.hand=[up?upgradedId54(c.id):c.id];b.energy=10;const v=cardPreviewValues59(cardDetail(b.hand[0]));const blk=b.block,hp=S.hp,enemy=b.enemies.map(e=>e.hp);playCard(0);ok(b.block-blk===v.block&&hp-S.hp===v.selfDamage,name+' preview block/HP');ok(enemy.every((h,i)=>h-b.enemies[i].hp===v.damage[i]),name+' dmg');return v}
+           for(const c of changed)for(const up of [false,true])for(const active of [false,true]){const b=start();if(active){b.block=8;b.attacksPlayed=1;b.enemies[0].poison=4;b.enemies[0].weak=1;b.enemies[0].bleed=1}use(c.name,up);ok(cardText(cardDetail(c.id,up)).length>0,c.name);runs++}
+           let t=start();t.enemies[0].weak=1;t.enemies[1].intent.value=14;ok(use('聖盾の反撃').block===7,'threat14');t.enemies[1].intent.value=15;ok(use('聖盾の反撃').block===10,'threat15');
+           t=start();use('氷紋の盾');ok(harmPlayer(12,true)===0&&t.pierceGuard===4,'shield absorbs');ok(harmPlayer(10,true)===6&&harmPlayer(10,true)===10,'one pierce');
+           t=start();use('焦熱結界');t.thorns=2;t.attacker=t.enemies[0];harmPlayer(1,true);ok(t.attacker.hp===991,'thorns stack');endTurn();ok(t.thorns===2&&!t.turnThorns,'expires');
+           t=start();use('氷紋の盾');t.enemies.forEach(e=>e.intent={kind:'defend',value:1});use('月鏡の結界');endTurn();ok(t.block===7&&!t.pierceGuard,'next turn');
+           t=start();t.enemies[1].poison=2;use('毒煙の撤退');ok(t.enemies[0].poison===0&&t.enemies[1].poison===5,'poison');
+           t=start();S.hp=3;ok(use('腐敗の帳').block===0&&S.hp===3,'low hp');S.hp=4;ok(use('腐敗の帳').block===9&&S.hp===1,'paid');
+           t=start();use('逆襲の誓い');ok(use('防御').block===7&&use('防御').block===5,'first guard');
+           t=start();use('魔力の反射');ok(use('盾の猛攻').block===3&&use('盾の猛攻').block===0,'cost power');
+           t=start();use('灯火を守る剣');ok(t.block===0,'no self enabling');use('防御');ok(use('灯火を守る剣').block===5,'guarded');
+           t=start();use('氷紋の盾');save();ok(validateSave(JSON.parse(localStorage.getItem(SAVE_KEY)))&&load().battle.pierceGuard===4,'resume');return {runs,mixed:mixed.map(c=>c.name)}
+           }),fixture);
+              console.log(JSON.stringify(out)); if(!(await page.locator('body').innerText()).includes('0.62'))throw Error('Version missing');
+            }finally{await browser.close()}
+          })().catch(e=>{console.error(e);process.exitCode=1})
+          JS
+          rc=0; node verify.cjs > result.txt 2>&1 || rc=$?
+          gh api -X PUT "repos/$GITHUB_REPOSITORY/contents/browser-result.txt" -f branch=card-roles-062 -f message='Report mobile Chromium checks' -f content="$(base64 -w0 result.txt)"
+          exit "$rc"
