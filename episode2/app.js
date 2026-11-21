@@ -301,7 +301,7 @@ function render() {
   const game = active && state;
   const content = !game ? home() : state.screen==='story' ? story() : state.screen==='map' ? mapScreen()
     : state.screen==='battle' ? battleScreen() : nodeScreen();
-  root.innerHTML = `<header><div class="brand"><span>ABYSS CHRONICLE</span><small>${game?'第'+(state.chapter+1)+'章 · '+chapter().name:'深淵の記録 · Ver.0.70'}</small></div>
+  root.innerHTML = `<header><div class="brand"><span>ABYSS CHRONICLE</span><small>${game?'第'+(state.chapter+1)+'章 · '+chapter().name:'深淵の記録 · Ver.0.71'}</small></div>
     ${game?act('☰','menu','','aria-label="メニュー"'):''}</header>
     ${game?'<div class="status">'+bars()+'</div>':''}
     <main>${content}</main>${notice?'<div role="status" class="notice">'+esc(notice)+'</div>':''}
