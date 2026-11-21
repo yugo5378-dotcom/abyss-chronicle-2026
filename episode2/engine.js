@@ -61,12 +61,20 @@ function readRun(storage) {
       || !between(state.scene,0,3) || !between(state.page,0,1) || !screenNames.includes(state.screen)
       || !Array.isArray(state.path) || state.path.length>15
       || !state.path.every(n => between(n,0,4))) return {state:null, corrupt:true};
+    let battleMigrated = false;
     if (state.screen === 'battle') {
       const battle = state.battle;
       if (!battle || !Array.isArray(battle.enemies) || !battle.enemies.some(enemy => enemy.hp>0)
         || !['hand','pile','discard','exhaust'].every(key => Array.isArray(battle[key])
           && battle[key].every(item => item && Object.hasOwn(CARDS,item.id)))
         || !Array.isArray(battle.log) || !between(battle.price,0,6)) return {state:null,corrupt:true};
+      // Older saves exhausted the lamp on its first use.
+      const usedLamps = battle.exhaust.filter(item=>item.id==='e2_34' && item.uses==null);
+      if (usedLamps.length) {
+        battle.exhaust = battle.exhaust.filter(item=>!usedLamps.includes(item));
+        battle.discard.push(...usedLamps.map(item=>({...item,uses:1})));
+        battleMigrated = true;
+      }
     }
     if (state.screen==='reward' && (!Array.isArray(state.reward?.cards) ||
       !state.reward.cards.every(id=>Object.hasOwn(CARDS,id)) ||
@@ -103,7 +111,7 @@ function readRun(storage) {
     if (state.replay && (!validBuild(state.replay) || state.replay.screen!=='hub' ||
       !validBuild(state.replay.checkpoint) || !between(state.replay.chapter,0,7) ||
       !validExpedition(state.replay.expedition) || state.replay.replay)) return {state:null,corrupt:true};
-    return {state,migrated:migrated||journalMigrated};
+    return {state,migrated:migrated||journalMigrated||battleMigrated};
   } catch {
     return {state:null,corrupt:true};
   }
@@ -419,7 +427,7 @@ function projection(state, item, enemy = null, useSacrifice = false) {
   return {
     price, canSpend, spend, damage:damage(enemy), damageFor:damage, block,
     recovery, actualHeal:Math.min(recovery,state.maxHp-state.hp+price),
-    hits:card.hits||1, energy:bonus('bonusEnergy'),
+    hits:card.hits||1, energy:(card.energy||0)+bonus('bonusEnergy'),
     nextEnergy:(card.nextEnergy||0)+bonus('bonusNextEnergy'),
     nextBlock:(card.nextBlock||0)+bonus('bonusNextBlock'),
     draw:(card.draw||0)+(card.draw && item.upgraded?1:0)+bonus('bonusDraw'),
@@ -487,12 +495,14 @@ function play(state, index, useSacrifice = false) {
   battle.nextEnergy=(battle.nextEnergy||0)+result.nextEnergy;
   battle.nextBlock=(battle.nextBlock||0)+result.nextBlock;
   addLog(battle,[card.name,dealt?dealt+'ダメージ':'',result.block?'防御+'+result.block:'',
-    healed?'HP+'+healed:'',result.price?'HP−'+result.price:'',result.spend?'代償−'+card.spend:''].filter(Boolean).join(' · '));
+    healed?'HP+'+healed:'',result.energy?'EN+'+result.energy:'',result.price?'HP−'+result.price:'',result.spend?'代償−'+card.spend:''].filter(Boolean).join(' · '));
   draw(battle,result.draw);
   if (result.spend && card.spend===6 && !battle.spentDraw && relicValue(state,'spendDraw')) {
     draw(battle,1); battle.spentDraw=true;
   }
-  (card.exhaust || card.power ? battle.exhaust : battle.discard).push(item);
+  const played = card.maxUses ? {...item,uses:(item.uses||0)+1} : item;
+  const reachedLimit = card.maxUses && played.uses>=card.maxUses;
+  (card.exhaust || card.power || reachedLimit ? battle.exhaust : battle.discard).push(played);
   checkWin(state);
   return true;
 }
