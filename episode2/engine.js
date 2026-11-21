@@ -341,6 +341,26 @@ function selectedEnemy(battle) {
     ?? battle.enemies.find(e=>e.hp>0);
 }
 
+const ROYAL_EMBER = {firstChapter:5,energy:1,recovery:12};
+
+function royalEmberStatus(state) {
+  const battle=state.battle;
+  if (state.screen!=='battle' || battle?.type!=='boss' || state.chapter<ROYAL_EMBER.firstChapter) return null;
+  const recovered=Math.min(ROYAL_EMBER.recovery,state.maxHp-state.hp);
+  const reason=battle.royalEmberUsed?'使用済み':battle.energy<ROYAL_EMBER.energy?'EN不足':!recovered?'HP満タン':'';
+  return {recovered,reason};
+}
+
+function useRoyalEmber(state) {
+  const status=royalEmberStatus(state);
+  if (!status || status.reason) return false;
+  const battle=state.battle;
+  battle.energy-=ROYAL_EMBER.energy;
+  battle.royalEmberUsed=true;
+  addLog(battle,'王の残火 · HP+'+heal(state,status.recovered));
+  return true;
+}
+
 function projection(state, item, enemy = null) {
   const card = CARDS[item.id], battle = state.battle;
   const price = card.hp || 0;
@@ -357,7 +377,10 @@ function projection(state, item, enemy = null) {
   return {
     price, spend, damage:damage(enemy), damageFor:damage, block,
     recovery, actualHeal:Math.min(recovery,state.maxHp-state.hp+price),
-    hits:card.hits||1, energy:spend?(card.bonusEnergy||0):0
+    hits:card.hits||1, energy:spend?(card.bonusEnergy||0):0,
+    draw:(card.draw||0)+(card.draw && item.upgraded?1:0)+(spend?(card.bonusDraw||0):0),
+    allWeak:(card.allWeak||0)+(spend?(card.bonusAllWeak||0):0),
+    allVuln:(card.allVuln||0)+(spend?(card.bonusAllVuln||0):0)
   };
 }
 
@@ -401,8 +424,8 @@ function play(state, index) {
   enemy.vuln += card.vuln || 0;
   enemy.poison += card.poison || 0;
   for (const target of living) {
-    target.weak += card.allWeak || 0;
-    target.vuln += card.allVuln || 0;
+    target.weak += result.allWeak;
+    target.vuln += result.allVuln;
   }
   const healed = heal(state,result.recovery);
   battle.block += result.block;
@@ -414,7 +437,7 @@ function play(state, index) {
   battle.energy += result.energy;
   addLog(battle,[card.name,dealt?dealt+'ダメージ':'',result.block?'防御+'+result.block:'',
     healed?'HP+'+healed:'',result.price?'HP−'+result.price:'',result.spend?'代償−'+card.spend:''].filter(Boolean).join(' · '));
-  draw(battle,(card.draw||0)+(card.draw && item.upgraded ? 1 : 0));
+  draw(battle,result.draw);
   if (result.spend && card.spend===6 && !battle.spentDraw && relicValue(state,'spendDraw')) {
     draw(battle,1); battle.spentDraw=true;
   }
