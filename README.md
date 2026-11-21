@@ -2,7 +2,15 @@
 
 [深淵の記録をプレイ](https://abyss-chronicle-2026.vercel.app/)
 
-Ver.0.61 の更新内容は [CHANGELOG.md](CHANGELOG.md) に掲載しています。
+更新内容は [CHANGELOG.md](CHANGELOG.md) に掲載しています。
+
+## Ver.0.70
+
+トップで第1話と第2話を選べます。第1話はVer.0.66のゲームとセーブを引き継ぎます。
+第2話は深淵の呪術師で進む全8章です。標準・熟練を選択でき、進行はブラウザに自動保存されます。
+
+ZIPから遊ぶ場合は展開先で静的HTTPサーバーを起動し、表示されたURLを開いてください。
+例えばPython 3なら、このファイルと同じフォルダで `python -m http.server 8000` を実行し、`http://localhost:8000/` を開きます。
 
 ## ゲーム公開の引き継ぎ
 
