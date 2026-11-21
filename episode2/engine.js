@@ -14,36 +14,7 @@ const shuffled = array => {
   return result;
 };
 const between = (x, low, high) => Number.isInteger(x) && x >= low && x <= high;
-const screenNames = ['story','map','battle','reward','camp','shop','event','lost','ending'];
-
-// Columns 0–2 keep their original meaning for saves from Ver.0.70–0.71.
-const ROUTES = [
-  ['battle','battle','battle','battle','battle'],
-  ['battle','event','battle','battle','event'],
-  ['battle','battle','event','battle','battle'],
-  ['elite','camp','battle','battle','event'],
-  ['battle','battle','battle','battle','battle'],
-  ['battle','event','battle','battle','battle'],
-  ['shop','camp','elite','battle','event'],
-  ['battle','battle','battle','battle','battle'],
-  ['battle','elite','event','battle','battle'],
-  ['battle','camp','battle','battle','event'],
-  ['battle','battle','shop','battle','battle'],
-  ['elite','battle','event','battle','battle'],
-  ['battle','battle','battle','battle','battle'],
-  ['camp','camp','camp','shop','battle'],
-  ['boss','boss','boss']
-];
-
-function routeMap() {
-  return ROUTES;
-}
-
-function routeLanes(row) {
-  if (!between(row,0,ROUTES.length-1)) return [];
-  if (row===ROUTES.length-1) return [1];
-  return row===6 ? [3,4,1,0,2] : [3,0,1,2,4];
-}
+const screenNames = ['story','map','battle','reward','camp','shop','event','treasure','trail','lost','ending'];
 
 function maxEnergy(state) {
   return state.chapter >= 1 ? 5 : 4;
@@ -52,8 +23,9 @@ function maxEnergy(state) {
 function chapterStart(state) {
   Object.assign(state, {
     row: 0, lane: 1, screen: 'story', scene: 0, page: 0, path: [],
-    battle: null, reward: null, shop: null, event: null
+    battle: null, reward: null, shop: null, event: null, treasure:null, traveler:null, prep:null
   });
+  state.expedition = makeExpedition(state);
   state.checkpoint = {
     hp: state.hp, maxHp: state.maxHp, gold: state.gold, deck: clone(state.deck),
     relics: [...state.relics], wins: state.wins
@@ -87,7 +59,7 @@ function readRun(storage) {
       || !between(state.chapter,0,7) || !between(state.row,0,14) || !between(state.lane,0,4)
       || !between(state.scene,0,3) || !between(state.page,0,1) || !screenNames.includes(state.screen)
       || !Array.isArray(state.path) || state.path.length>15
-      || !state.path.every((n,row) => between(n,0,ROUTES[row].length-1))) return {state:null, corrupt:true};
+      || !state.path.every(n => between(n,0,4))) return {state:null, corrupt:true};
     if (state.screen === 'battle') {
       const battle = state.battle;
       if (!battle || !Array.isArray(battle.enemies) || !battle.enemies.some(enemy => enemy.hp>0)
@@ -97,7 +69,20 @@ function readRun(storage) {
     }
     if (state.screen === 'reward' && !Array.isArray(state.reward?.cards)) return {state:null,corrupt:true};
     if (state.screen === 'shop' && !Array.isArray(state.shop?.cards)) return {state:null,corrupt:true};
-    return {state};
+    const migrated=state.expedition==null;
+    if (migrated) {
+      if (!state.path.every((n,row)=>between(n,0,LEGACY_MAP[row].length-1))) return {state:null,corrupt:true};
+      state.expedition=makeExpedition(state,true);
+    }
+    if (!validExpedition(state.expedition) || !state.path.every((n,row)=>between(n,0,state.expedition.rows[row].length-1))) {
+      return {state:null,corrupt:true};
+    }
+    if (state.screen==='shop' && !state.shop.kind) {
+      state.shop={...makeShop(state,'general'),...state.shop,prices:state.shop.cards.map(id=>({common:45,uncommon:65,rare:95}[CARDS[id].rarity])),services:['remove']};
+    }
+    if (state.screen==='trail' && !Object.hasOwn(TRAVELERS,state.traveler)) return {state:null,corrupt:true};
+    if (state.screen==='treasure' && !state.treasure?.every?.(id=>Object.hasOwn(CARDS,id))) return {state:null,corrupt:true};
+    return {state,migrated};
   } catch {
     return {state:null,corrupt:true};
   }
@@ -138,8 +123,8 @@ function whichCards(kind, count) {
 }
 
 function chooseNode(state, lane, balance) {
-  if (state.screen !== 'map' || !routeLanes(state.row).includes(lane)) return false;
-  const kind = routeMap()[state.row][lane];
+  if (state.screen !== 'map' || !availableLanes(state).includes(lane)) return false;
+  const kind = state.expedition.rows[state.row][lane];
   state.lane = lane;
   state.path.push(lane);
   if (kind === 'boss') {
@@ -148,7 +133,9 @@ function chooseNode(state, lane, balance) {
     beginBattle(state, kind, balance);
   } else {
     state.screen = kind;
-    if (kind === 'shop') state.shop = {cards:whichCards('shop',3),removed:false};
+    if (kind === 'shop') state.shop = makeShop(state,state.expedition.shops[state.row][lane]);
+    if (kind === 'treasure') state.treasure = whichCards('elite',3);
+    if (kind === 'trail') state.traveler = pick(Object.keys(TRAVELERS));
     if (kind === 'event') state.event = pick([0,1,2]);
   }
   return true;
@@ -180,6 +167,8 @@ function advanceNode(state) {
   state.reward = null;
   state.shop = null;
   state.event = null;
+  state.treasure = null;
+  state.traveler = null;
 }
 
 function retryChapter(state) {
@@ -229,6 +218,8 @@ function beginBattle(state, type, balance) {
   });
   state.screen = 'battle';
   addLog(battle,'戦闘開始');
+  battle.prep=state.prep;
+  state.prep=null;
   startTurn(state);
 }
 
@@ -258,10 +249,10 @@ function startTurn(state) {
   battle.chargeDamage = 0;
   if (battle.passiveHeal) heal(state,battle.passiveHeal);
   if (battle.turn === 1) {
-    battle.block += relicValue(state,'block');
+    battle.block += relicValue(state,'block') + (battle.prep==='mercenary'?10:0);
     battle.energy += relicValue(state,'energy');
   }
-  draw(battle, 5 + (state.chapter >= 2 ? 1 : 0) + (battle.turn === 1 ? relicValue(state,'draw') : 0));
+  draw(battle, 5 + (state.chapter >= 2 ? 1 : 0) + (battle.turn === 1 ? relicValue(state,'draw') + (battle.prep==='scout'?1:0) : 0));
   for (const enemy of battle.enemies) enemy.phase = Number(enemy.hp*2 <= enemy.maxHp);
   const charging = battle.enemies.some(enemy => enemy.hp>0 && enemy.boss && intent(enemy,battle).kind==='charge');
   if (charging && battle.escort && !battle.escortSummoned) {
@@ -386,7 +377,10 @@ function enemyTurn(state) {
       state.hp = Math.max(0,state.hp-(value-block));
       addLog(battle,enemy.name+' · '+(value-block)+'ダメージ'+(block?'（防御 '+block+'）':''));
     }
-    if (kind === 'poison') battle.poison += value;
+    if (kind === 'poison') {
+      if (battle.prep==='herbalist') battle.prep=null;
+      else battle.poison += value;
+    }
     if (kind === 'defend') enemy.block += value;
     if (kind === 'buff') enemy.str += value;
     if (kind === 'heal') {

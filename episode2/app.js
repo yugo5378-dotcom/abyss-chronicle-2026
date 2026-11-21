@@ -4,10 +4,12 @@ const root = document.querySelector('#game');
 const types = {attack:'攻撃',defense:'防御',heal:'回復',utility:'術式'};
 const rarityNames = {common:'コモン',uncommon:'アンコモン',rare:'レア'};
 const nodes = {
-  battle:['⚔️','通常戦闘','通常の敵と戦闘。勝利で金貨・カードを獲得。'],
+  battle:['⚔️','通常戦闘','通常の敵と戦闘。勝利で金貨・カードと戦闘後回復。'],
   elite:['💀','精鋭','強敵に挑戦。勝利でレリックを獲得。'],
   event:['❔','事件','何が起きるかは選択次第。'],
-  camp:['🔥','休息','HP回復か、カード強化を選ぶ。'],
+  camp:['🔥','休息','回復・カード強化・1枚無料削除から選ぶ。'],
+  treasure:['🎁','宝箱','金貨かカードを選ぶ。'],
+  trail:['♧','旅路','旅人と出会い、取引や次の戦闘の準備ができる。'],
   shop:['⚖️','旅商人','カードの購入とデッキ整理。'],
   boss:['👑','階層ボス','この地域のボスに挑む。']
 };
@@ -23,8 +25,8 @@ const eventOptions = [
 ];
 const caches = new Map();
 const storage = {getItem:key=>localStorage.getItem(key),setItem:(key,value)=>localStorage.setItem(key,value)};
-let {state,corrupt} = readRun(storage);
-let active = false, busy = false, overlay = '', index = -1, handPage = 0, listPage = 0, treeSelection = null;
+let {state,corrupt,migrated} = readRun(storage);
+let active = false, busy = false, overlay = '', index = -1, handPage = 0, listPage = 0, treeSelection = null, shopPage = 0;
 let notice = '', difficulty = state?.difficulty ?? 'standard';
 const esc = value => String(value).replace(/[&<>"']/g,x=>({
   '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
@@ -95,7 +97,7 @@ function story() {
 
 function routeTop() {
   return `<div class="ep2-route-top">
-    <div class="ep2-wordmark">ABYSS CHRONICLE<small>深淵の記録 · 第2話 · VER 0.73</small></div>
+    <div class="ep2-wordmark">ABYSS CHRONICLE<small>深淵の記録 · 第2話 · VER 0.74</small></div>
     <div class="ep2-hud">
       <span>♥ ${state.hp}/${state.maxHp}</span><span>◇ ${state.gold}G</span>
       ${act('デッキ '+state.deck.length,'deck')}${act('レリック '+state.relics.length,'relics')}
@@ -105,10 +107,16 @@ function routeTop() {
   </div>`;
 }
 
+function routeNode(row,lane) {
+  const kind = state.expedition.rows[row][lane];
+  const [icon,label,desc] = nodes[kind];
+  return kind==='shop' ? [icon,SHOP_NAMES[state.expedition.shops[row][lane]],desc] : [icon,label,desc];
+}
+
 function mapScreen() {
-  const options = routeLanes(state.row).map(lane=>{
-    const kind = routeMap()[state.row][lane];
-    const [icon,label,desc] = nodes[kind];
+  const options = availableLanes(state).slice().sort((a,b)=>a-b).map(lane=>{
+    const kind = state.expedition.rows[state.row][lane];
+    const [icon,label,desc] = routeNode(state.row,lane);
     return act(`<span class="route-icon">${icon}</span><span><b>${label}</b><small>${desc}</small></span><span aria-hidden="true">→</span>`,
       'node',lane,`class="route-choice ${kind}"`);
   });
@@ -118,40 +126,30 @@ function mapScreen() {
       <h1>${esc(chapter().name)}</h1></div>${act('道の全体図','tree','','class="ep2-gold"')}</div>
     <h2>進む道を選ぶ</h2>
     <div class="ep2-route-options">${options.join('')}</div>
-    <div class="ep2-route-actions">${act('目的・道中の記録','journey','','class="ep2-gold"')}</div>
+    <div class="ep2-route-actions">${act('目的・道中の記録','journey','','class="ep2-gold"')}${act('地域をやり直す','retreat','','class="ep2-gold"')}</div>
     <div class="ep2-pagination">${act('前へ','noop','','disabled')}<span>1 / 1</span>${act('次へ','noop','','disabled')}</div>
   </section>`;
 }
 
 const TREE_GAP = 83;
-const TREE_HEIGHT = 15*TREE_GAP+28;
-const treeY = row => 48+(ROUTES.length-1-row)*TREE_GAP;
+const TREE_HEIGHT = MAP_STEPS*TREE_GAP+28;
+const treeY = row => 48+(MAP_STEPS-1-row)*TREE_GAP;
 
-function treeX(row,lane) {
-  const lanes = routeLanes(row);
-  return lanes.length===1 ? 180 : 42+69*lanes.indexOf(lane);
-}
+const treeX = (row,lane) => state.expedition.positions[row][lane]*3.6;
 
 function treeGraphic() {
-  const links = [];
-  for (let row=0;row<ROUTES.length-1;row++) {
-    const y = treeY(row), nextY = treeY(row+1);
-    for (const a of routeLanes(row)) {
-      for (const b of routeLanes(row+1)) {
-        const x = treeX(row,a), nextX = treeX(row+1,b);
-        const taken = state.path[row]===a && (state.path[row+1]===b || row+1===14 && state.path.length===15);
-        const current = row===state.row-1 && state.path[row]===a;
-        const style = taken?'trail-done':current?'trail-next':Math.abs(x-nextX)>75 && row+1!==14?'ep2-distant':'';
-        links.push(`<path d="M ${x} ${y} C ${x} ${y-31}, ${nextX} ${nextY+31}, ${nextX} ${nextY}" class="${style}"/>`);
-      }
-    }
-  }
-  const rows = ROUTES.map((_,row)=>{
-    const markers = routeLanes(row).map(lane=>{
-      const kind = ROUTES[row][lane];
-      const [icon,label] = nodes[kind];
+  const links = state.expedition.links.flatMap((edges,row)=>edges.map(([a,b])=>{
+    const y = treeY(row), nextY = treeY(row+1), x = treeX(row,a), nextX = treeX(row+1,b);
+    const taken = state.path[row]===a && state.path[row+1]===b;
+    const current = row===state.row-1 && state.path[row]===a;
+    return `<path d="M ${x} ${y} C ${x} ${y-36}, ${nextX} ${nextY+36}, ${nextX} ${nextY}" class="${taken?'trail-done':current?'trail-next':''}"/>`;
+  }));
+  const rows = state.expedition.rows.map((_,row)=>{
+    const markers = routeLanes(state,row).map(lane=>{
+      const kind = state.expedition.rows[row][lane];
+      const [icon,label] = routeNode(row,lane);
       const visited = row===14 ? state.path.length===15 : state.path[row]===lane;
-      const current = row===state.row;
+      const current = row===state.row && availableLanes(state).includes(lane);
       return act(`<span>${visited?'✓':icon}</span><b>${label}</b>`,'tree-node',row*5+lane,
         `class="route-map-node ${kind} ${visited?'taken':''} ${current?'available':''} ${row<state.row&&!visited?'missed':''}"
         style="left:${treeX(row,lane)/3.6}%" aria-label="${row+1}段目 ${label}${visited?' 通過済み':''}"`);
@@ -166,7 +164,10 @@ function treeScreen() {
   const selection = treeSelection===null ? null : {
     row:Math.floor(treeSelection/5),lane:treeSelection%5
   };
-  const selected = selection && nodes[ROUTES[selection.row][selection.lane]];
+  const selected = selection && routeNode(selection.row,selection.lane);
+  const isAvailable = selection?.row===state.row && availableLanes(state).includes(selection.lane);
+  const leadingTo = selection && nextLanes(state,selection.row,selection.lane)
+    .map(lane=>routeNode(selection.row+1,lane)[1]).join(' ／ ');
   return `<section class="ep2-tree" role="dialog" aria-modal="true" aria-label="道の全体図">
     <header><h2>道の全体図</h2>${act('戻る ×','close','','class="ep2-gold"')}</header>
     <div class="ep2-tree-current"><span>下から上へ · 点線でつながる道だけ進めます</span>
@@ -181,7 +182,9 @@ function treeScreen() {
     ${selected?`<div class="ep2-tree-details"><section class="dialog" role="group" aria-label="地点の詳細">
       ${act('閉じる','tree-detail-close','','class="close"')}
       <h2>${selection.row+1}段目 · ${selected[1]}</h2><p>${selected[2]}</p>
-      <p>${selection.row===state.row?'ルート選択画面で進む道を選べます。':selection.row<state.row?'通過した段です。':'先の段です。'}</p>
+      <p>${isAvailable?'現在地から進めます。':selection.row<state.row?(state.path[selection.row]===selection.lane?'通過した道です。':'通らなかった道です。'):'点線でつながる地点に進めます。'}</p>
+      ${leadingTo?'<p>この先：'+leadingTo+'</p>':''}
+      ${isAvailable?act('ここへ進む','node',selection.lane,primary):''}
     </section></div>`:''}
   </section>`;
 }
@@ -291,7 +294,7 @@ function battleScreen() {
   return `<section class="battle51 ep2-combat" aria-label="戦闘画面">
     <div class="b51-header">
       ${act('≡','menu','','aria-label="メニュー"')}
-      <div><b>ABYSS CHRONICLE</b><small>第${state.chapter+1}地域 · TURN ${battle.turn} · Ver.0.73</small></div>
+      <div><b>ABYSS CHRONICLE</b><small>第${state.chapter+1}地域 · TURN ${battle.turn} · Ver.0.74</small></div>
       ${act(state.gold+'G','battle-status','','aria-label="自分の状態と所持金"')}
     </div>
     <div class="b51-health">
@@ -345,12 +348,14 @@ function nodeScreen() {
       <div class="choices">${r.cards.map((id,i)=>choiceCard(id,'reward',i)).join('')}</div>${act('カードを受け取らず進む','advance')}</section>`;
   }
   if (s === 'camp') return `<section class="board options">${bg(state.chapter,0,'short-art')}<h2>休息</h2>
-    ${act('休む · HPを最大'+Math.floor(state.maxHp*.35)+'回復','rest','',primary)}
-    ${act('カードを1枚強化','upgrade','',state.deck.every(c=>c.upgraded)?'disabled':'')}</section>`;
-  if (s === 'shop') return `<section class="board options"><h2>旅の商人</h2>
-    <div class="choices">${state.shop.cards.map((id,i)=>choiceCard(id,'buy',i,' · '+priceOf(id)+'G',state.gold<priceOf(id))).join('')||'<p>売り切れ</p>'}</div>
-    ${act('カードを1枚削除 · 55G','remove','',state.shop.removed||state.deck.length<=8||state.gold<55?'disabled':'')}
-    ${act('店を出る','advance','',primary)}</section>`;
+    ${act('休む · HPを最大'+Math.max(15,Math.round(state.maxHp*.30))+'回復','rest','',primary)}
+    ${act('カードを1枚強化','upgrade','',state.deck.every(c=>c.upgraded)?'disabled':'')}
+    ${act('カードを1枚無料削除','remove','',state.deck.length<=8?'disabled':'')}</section>`;
+  if (s === 'shop') return shopScreen();
+  if (s === 'treasure') return `<section class="board options"><h2>🎁 宝箱</h2><p>金貨かカードを1つ選びます。</p>
+    <div class="choices">${state.treasure.map((id,i)=>choiceCard(id,'treasure-card',i)).join('')}</div>
+    ${act('金貨 40Gを受け取る','treasure-gold','',primary)}</section>`;
+  if (s === 'trail') return trailScreen();
   if (s === 'event') {
     const e = eventOptions[state.event];
     return `<section class="board options">${bg(state.chapter,1,'short-art')}<h2>${e.title}</h2><p>${e.text}</p>
@@ -363,8 +368,43 @@ function nodeScreen() {
     <p>全8章を踏破 · ${state.wins}勝</p>${act('第2話タイトルへ','title','',primary)}<a class="button" href="../">話数選択へ</a></section>`;
 }
 
-function priceOf(id) {
-  return {common:45,uncommon:65,rare:95}[CARDS[id].rarity];
+const servicePrices = {heal:30,remove:55,upgrade:80,relic:160,trade:45,herbalist:25,scout:30};
+const serviceLabels = {heal:'HPを回復',remove:'カードを削除',upgrade:'カードを強化',relic:'レリックを見る',trade:'カードを交換',
+  herbalist:'毒よけの薬を買う',scout:'初手＋1の薬を買う'};
+
+function canUseService(key) {
+  if (!state.shop.services.includes(key) || state.shop.used.includes(key) || state.gold<servicePrices[key]) return false;
+  if (key==='remove') return state.deck.length>8 && !state.shop.removed;
+  if (key==='upgrade') return state.deck.some(item=>!item.upgraded);
+  if (key==='relic') return state.shop.relics.length>0;
+  if (key==='herbalist' || key==='scout') return !state.prep;
+  if (key==='heal') return state.hp<state.maxHp;
+  return true;
+}
+
+function shopScreen() {
+  const shop = state.shop;
+  const pages = Math.max(1,Math.ceil(shop.cards.length/3));
+  shopPage=Math.min(shopPage,pages-1);
+  const start=shopPage*3;
+  return `<section class="board options"><h2>⚖️ ${SHOP_NAMES[shop.kind]}</h2>
+    <div class="choices">${shop.cards.slice(start,start+3).map((id,i)=>choiceCard(id,'buy',start+i,' · '+shop.prices[start+i]+'G',state.gold<shop.prices[start+i])).join('')}</div>
+    ${pages>1?`<div class="page-row">${act('前へ','shop-page',-1,shopPage===0?'disabled':'')}<span>${shopPage+1}/${pages}</span>${act('次へ','shop-page',1,shopPage===pages-1?'disabled':'')}</div>`:''}
+    <div class="two">${shop.services.map(key=>act(serviceLabels[key]+' · '+servicePrices[key]+'G','service',key,canUseService(key)?'':'disabled')).join('')}</div>
+    ${act('店を出る','advance','',primary)}</section>`;
+}
+
+function useService(key) {
+  state.gold-=servicePrices[key];
+  state.shop.used.push(key);
+}
+
+function trailScreen() {
+  const traveler = TRAVELERS[state.traveler];
+  return `<section class="board options"><h2>${traveler.name}</h2><p>${traveler.text}</p>
+    ${act(state.traveler==='trader'?'交換するカードを選ぶ':'準備する · '+traveler.price+'G','trail-trade','',
+      state.traveler!=='trader'&&(state.prep||state.gold<traveler.price)?'disabled':primary)}
+    ${act('取引せず通過','advance')}</section>`;
 }
 
 function overlayBody() {
@@ -410,8 +450,13 @@ function overlayBody() {
       <p>弱体 ${e.weak} · 脆弱 ${e.vuln} · 毒 ${e.poison}</p><p>次の行動　${intentText(e,b)}</p>
       ${intent(e,b).kind==='charge'?'<p>中断まで '+Math.max(0,b.staggerNeed-b.chargeDamage)+' ダメージ</p>':''}`;
   }
+  if (overlay === 'retreat') return `<h2>地域をやり直しますか？</h2>
+    <p>出発前の状態に戻り、道を再抽選します。</p>${act('やり直す','restart-region','',primary)}`;
+  if (overlay === 'relic-shop') return `<h2>レリックを選ぶ</h2><div class="choices">
+    ${state.shop.relics.map(id=>act(`<strong>${DATA.relics[id].name} · 160G</strong><small>${DATA.relics[id].desc}</small>`,
+      'buy-relic',id,'class="entry"')).join('')}</div>`;
   if (overlay === 'confirm-new') return `<h2>最初から始めますか？</h2><p>現在の第2話の進行が上書きされます。</p>${act('新しい旅を始める','reset','',primary)}`;
-  const title = {deck:'デッキ',upgrade:'強化するカード',remove:'削除するカード'}[overlay];
+  const title = {deck:'デッキ',upgrade:'強化するカード',remove:'削除するカード',trade:'交換に出すカード'}[overlay];
   return `<h2>${title} · ${state.deck.length}枚</h2>`+paged(state.deck,4,(item,i)=>{
     const card = CARDS[item.id];
     const label = `<strong>${card.name}${item.upgraded?'+':''} · ${card.cost}EN</strong><small>${details(item).join(' · ')}</small>`;
@@ -438,7 +483,7 @@ function render() {
   const scrollTop = tree ? root.querySelector('.ep2-tree-scroll')?.scrollTop : null;
   root.dataset.view = immersive ? (tree?'tree':state.screen) : 'normal';
   const chrome = immersive ? '' : `<header><div class="brand"><span>ABYSS CHRONICLE</span>
-    <small>${game?'第'+(state.chapter+1)+'章 · '+chapter().name:'深淵の記録 · Ver.0.73'}</small></div>
+    <small>${game?'第'+(state.chapter+1)+'章 · '+chapter().name:'深淵の記録 · Ver.0.74'}</small></div>
     ${game?act('☰','menu','','aria-label="メニュー"'):''}</header>${game?'<div class="status">'+bars()+'</div>':''}`;
   root.innerHTML = `${chrome}<main>${content}</main>${notice?'<div role="status" class="notice">'+esc(notice)+'</div>':''}
     ${overlay&&!tree?`<div class="shade"><section class="dialog" role="dialog" aria-modal="true">
@@ -467,10 +512,10 @@ root.addEventListener('click',async event=>{
   else if (action === 'close') overlay='';
   else if (action === 'tree' && state?.screen==='map') { overlay='tree'; treeSelection=null; }
   else if (action === 'tree-current' && overlay==='tree') { focusTree(); return; }
-  else if (action === 'tree-node' && overlay==='tree' && routeLanes(Math.floor(n/5)).includes(n%5)) treeSelection=n;
+  else if (action === 'tree-node' && overlay==='tree' && routeLanes(state,Math.floor(n/5)).includes(n%5)) treeSelection=n;
   else if (action === 'tree-detail-close' && overlay==='tree') treeSelection=null;
   else if (['menu','deck','relics','log','rules','card-info','upgrade','remove','journey',
-    'battle-status','enemy-info','pile','discard','exhaust'].includes(action)) {
+    'battle-status','enemy-info','pile','discard','exhaust','retreat'].includes(action)) {
     overlay=action; listPage=0;
   } else if (action==='list-page') listPage+=n;
   else if (!active || !state) return;
@@ -478,10 +523,12 @@ root.addEventListener('click',async event=>{
     busy=true;
     button.disabled=true;
     try {
-      const nodeType = action==='node' ? routeMap()[state.row][n] : '';
+      const nodeType = action==='node' ? state.expedition.rows[state.row][n] : '';
       const needsBalance = ['battle','elite'].includes(nodeType) || action==='story-next' && state.scene===2 && state.page===1;
       const data = needsBalance ? await loadBalance() : null;
-      if (action==='node') chooseNode(state,n,data); else nextStory(state,data);
+      if (action==='node') {
+        if (chooseNode(state,n,data)) { overlay=''; shopPage=0; }
+      } else nextStory(state,data);
       index=-1; handPage=0;
     } catch {
       notice='戦闘データを読み込めません。接続を確認して、もう一度タップしてください。';
@@ -498,16 +545,49 @@ root.addEventListener('click',async event=>{
   else if (action==='reward' && state.screen==='reward' && state.reward.cards[n]) {
     state.deck.push({id:state.reward.cards[n],upgraded:false}); advanceNode(state);
   } else if (action==='advance') advanceNode(state);
-  else if (action==='rest') { heal(state,Math.floor(state.maxHp*.35)); advanceNode(state); }
-  else if (action==='upgrade-card' && state.screen==='camp' && state.deck[n]) {
-    state.deck[n].upgraded=true; overlay=''; advanceNode(state);
-  } else if (action==='remove-card' && state.screen==='shop' && state.gold>=55 && state.deck.length>8) {
-    state.deck.splice(n,1); state.gold-=55; state.shop.removed=true; overlay='';
-  } else if (action==='buy' && state.screen==='shop') {
-    const id = state.shop.cards[n];
-    if (id && state.gold>=priceOf(id)) {
-      state.gold-=priceOf(id); state.deck.push({id,upgraded:false}); state.shop.cards.splice(n,1);
+  else if (action==='rest' && state.screen==='camp') { heal(state,Math.max(15,Math.round(state.maxHp*.30))); advanceNode(state); }
+  else if (action==='shop-page' && state.screen==='shop') shopPage=Math.max(0,shopPage+n);
+  else if (action==='service' && state.screen==='shop' && canUseService(raw)) {
+    if (['remove','upgrade','trade','relic'].includes(raw)) { overlay=raw==='relic'?'relic-shop':raw;listPage=0; }
+    else {
+      useService(raw);
+      if (raw==='heal') heal(state,24); else state.prep=raw;
     }
+  } else if (action==='buy-relic' && state.screen==='shop' && canUseService('relic') && state.shop.relics.includes(n)) {
+    useService('relic'); earnRelic(state,n); overlay='';
+  } else if (action==='upgrade-card' && state.deck[n] && !state.deck[n].upgraded) {
+    if (state.screen==='camp' || state.screen==='shop' && canUseService('upgrade')) {
+      state.deck[n].upgraded=true; overlay='';
+      if (state.screen==='camp') advanceNode(state); else useService('upgrade');
+    }
+  } else if (action==='remove-card' && state.deck[n] && state.deck.length>8) {
+    if (state.screen==='camp' || state.screen==='shop' && canUseService('remove')) {
+      state.deck.splice(n,1); overlay='';
+      if (state.screen==='camp') advanceNode(state);
+      else { useService('remove'); state.shop.removed=true; }
+    }
+  } else if (action==='buy' && state.screen==='shop') {
+    const id = state.shop.cards[n], price = state.shop.prices[n];
+    if (id && state.gold>=price) {
+      state.gold-=price; state.deck.push({id,upgraded:false});
+      state.shop.cards.splice(n,1); state.shop.prices.splice(n,1);
+    }
+  } else if (action==='treasure-card' && state.screen==='treasure' && state.treasure[n]) {
+    state.deck.push({id:state.treasure[n],upgraded:false}); advanceNode(state);
+  } else if (action==='treasure-gold' && state.screen==='treasure') {
+    state.gold+=40; advanceNode(state);
+  } else if (action==='trail-trade' && state.screen==='trail') {
+    const traveler = TRAVELERS[state.traveler];
+    if (state.traveler==='trader') { overlay='trade'; listPage=0; }
+    else if (!state.prep && state.gold>=traveler.price) {
+      state.gold-=traveler.price; state.prep=state.traveler; advanceNode(state);
+    }
+  } else if (action==='trade-card' && state.deck[n] &&
+    (state.screen==='trail' && state.traveler==='trader' || state.screen==='shop' && canUseService('trade'))) {
+    const old=CARDS[state.deck[n].id];
+    const replacement=pick(DATA.cards.filter(card=>card.id!==old.id && card.rarity===old.rarity));
+    state.deck[n]={id:replacement.id,upgraded:false}; overlay='';
+    if (state.screen==='trail') advanceNode(state); else useService('trade');
   } else if (action==='event' && state.screen==='event') {
     if (state.event===0) { if (n===0) heal(state,12); else state.gold+=35; }
     if (state.event===1) {
@@ -519,9 +599,10 @@ root.addEventListener('click',async event=>{
       else state.gold+=25;
     }
     if (state.screen==='event') advanceNode(state);
-  } else if (action==='retry') retryChapter(state);
+  } else if (action==='retry' || action==='restart-region' && state.screen==='map') { overlay='';retryChapter(state); }
   if (state) persist();
   render();
 });
 
+if (migrated) persist();
 render();

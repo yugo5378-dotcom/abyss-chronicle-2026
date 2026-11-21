@@ -254,3 +254,5 @@ body.episode-two #game {
   .ep2-combat .b51-enemies { bottom: 43px!important; max-height: 65%; }
   .ep2-combat .b51-hero { max-width: 36%; }
 }
+.ep2-route-actions { gap: 5px; }
+.ep2-tree .parchment45 svg path.trail-done { opacity: 1; }
