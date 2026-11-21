@@ -202,7 +202,7 @@ function story() {
 
 function routeTop() {
   return `<div class="ep2-route-top">
-    <div class="ep2-wordmark">ABYSS CHRONICLE<small>深淵の記録 · 第2話 · VER 0.77</small></div>
+    <div class="ep2-wordmark">ABYSS CHRONICLE<small>深淵の記録 · 第2話 · VER 0.78</small></div>
     <div class="ep2-hud">
       <span>♥ ${state.hp}/${state.maxHp}</span><span>◇ ${state.gold}G</span>
       ${act('デッキ '+state.deck.length,'deck')}${act('レリック '+state.relics.length,'relics')}
@@ -310,10 +310,10 @@ function intentText(enemy,battle) {
 
 function tile(item,i,sel) {
   const card = CARDS[item.id];
-  const {damage,block,actualHeal,hits,price,draw,allWeak,allVuln} = projection(state,item,selectedEnemy(state.battle));
+  const {damage,block,actualHeal,hits,price,draw,allWeak,allVuln,allPoison,nextBlock,nextEnergy} = projection(state,item,selectedEnemy(state.battle));
   const summary = [damage?(card.aoe?'全体 ':'')+damage+(hits>1?'×'+hits:'')+'打':'',
     block?'防御 '+block:'',card.heal?'回復 '+actualHeal:'',price?'HP−'+price:'',
-    draw?'引く '+draw:'',allWeak?'全体弱体 '+allWeak:'',allVuln?'全体脆弱 '+allVuln:''].filter(Boolean).join(' · ');
+    draw?'引く '+draw:'',allWeak?'全体弱体 '+allWeak:'',allVuln?'全体脆弱 '+allVuln:'',allPoison?'全体毒 '+allPoison:'',nextBlock?'次の防御 '+nextBlock:'',nextEnergy?'次のEN +'+nextEnergy:''].filter(Boolean).join(' · ');
   const art = card.category==='attack'?(card.aoe?2:0):card.category==='defense'?1:card.category==='heal'?4:5;
   const unavailable = state.battle.energy<card.cost || state.hp<=(card.hp||0);
   return `<button class="b51-card rarity-${card.rarity} ${sel?'b52-selected':''} ${unavailable?'unaffordable':''}"
@@ -342,15 +342,20 @@ function details(item, battle = null) {
   if (f.block) lines.push('防御 '+f.block);
   if (f.recovery) lines.push('HP回復 '+(battle?f.actualHeal+' / 最大'+f.recovery:f.recovery));
   if (f.price) lines.push('HP消費 '+f.price+'、代償 +'+(battle?Math.min(6-battle.price,f.price):f.price));
+  if (card.poisonedHit) lines.push('毒状態の敵にダメージ+'+card.poisonedHit);
+  if (card.weakenedHit) lines.push('弱体状態の敵にダメージ+'+card.weakenedHit);
   if (card.spend) {
     const changes = [[card.bonusHit,'ダメージ'],[card.bonusBlock,'防御'],[card.bonusHeal,'回復'],[card.bonusEnergy,'エナジー'],
-      [card.bonusDraw,'ドロー'],[card.bonusAllWeak,'全体弱体'],[card.bonusAllVuln,'全体脆弱']]
+      [card.bonusDraw,'ドロー'],[card.bonusAllWeak,'全体弱体'],[card.bonusAllVuln,'全体脆弱'],
+      [card.bonusWeak,'弱体'],[card.bonusVuln,'脆弱'],[card.bonusPoison,'毒'],
+      [card.bonusAllPoison,'全体毒'],[card.bonusNextEnergy,'次のターンのEN'],[card.bonusNextBlock,'次のターンの防御']]
       .filter(([value])=>value).map(([value,label])=>label+'+'+value).join('、');
-    lines.push('代償'+card.spend+'以上で消費 → '+changes+(battle?(f.spend?'（発動）':'（不足）'):''));
+    lines.push('代償'+card.spend+'を使うと '+changes+(battle?(f.canSpend?'（使用可能）':'（代償不足）'):''));
   }
   for (const [key,label,up] of [
     ['draw','ドロー',1],['weak','弱体',0],['vuln','脆弱',0],['poison','毒',0],['cleanse','毒を軽減',0],
-    ['allWeak','全体弱体',0],['allVuln','全体脆弱',0],['str','筋力+',1],['dex','防御力+',1],
+    ['allWeak','全体弱体',0],['allVuln','全体脆弱',0],['allPoison','全体毒',0],
+    ['nextBlock','次のターンの防御',0],['nextEnergy','次のターンのEN+',0],['str','筋力+',1],['dex','防御力+',1],
     ['passiveBlock','毎ターン防御',2],['passiveHeal','毎ターン回復',1]
   ]) {
     if (card[key]) lines.push(label+' '+(card[key]+(boost?up:0)));
@@ -387,6 +392,7 @@ function battleScreen() {
   const charging = alive.find(e=>e.boss && intent(e,battle).kind==='charge');
   const lock = card && (battle.energy<card.cost?'エナジー不足':state.hp<=(card.hp||0)?'HP不足':'');
   const projectionText = card ? details(item,battle) : [];
+  const canSpend = card?.spend && projection(state,item,enemy).canSpend;
   const gauge = Array.from({length:6},(_,i)=>`<i class="${i<battle.price?'filled':''}"></i>`).join('');
   const intents = alive.map(e=>act(
     `<small>${e.index===enemy.index?'◆ ':''}${esc(e.name)}</small><b>${intentText(e,battle)}</b>`,
@@ -401,7 +407,7 @@ function battleScreen() {
     <div class="b51-header">
       ${act(royalEmberStatus(state)&&!battle.royalEmberUsed?'≡ ✦':'≡','menu','',
         'aria-label="メニュー'+(royalEmberStatus(state)&&!battle.royalEmberUsed?'・王の残火あり':'')+'"')}
-      <div><b>ABYSS CHRONICLE</b><small>第${state.chapter+1}地域 · TURN ${battle.turn} · Ver.0.77</small></div>
+      <div><b>ABYSS CHRONICLE</b><small>第${state.chapter+1}地域 · TURN ${battle.turn} · Ver.0.78</small></div>
       ${act(state.gold+'G','battle-status','','aria-label="自分の状態と所持金"')}
     </div>
     <div class="b51-health">
@@ -429,7 +435,10 @@ function battleScreen() {
       <div>${card?`<strong>${card.name}${item.upgraded?'+':''} · ${card.cost} EN</strong>
         <p>${projectionText.slice(0,2).join(' · ')}</p>${act('全効果','card-info','','class="b52-more"')}`
         : '<strong>カードを選択</strong><p>手札をタップ → 敵を選択 → 使用する</p>'}</div>
-      ${act(lock||'使用する','play','',(!card||lock)?'disabled':'')}
+      ${card?.spend?`<div class="ep2-cast-actions">
+        ${act(lock||'通常使用','play','',lock?'disabled':'')}
+        ${act('代償'+card.spend+'を使う','play','sacrifice',lock||!canSpend?'disabled':'class="ep2-cast-sacrifice"')}
+      </div>`:act(lock||'使用する','play','',(!card||lock)?'disabled':'') }
     </div>
     <div class="b51-actions ep2-battle-actions">
       ${act('山札<br><b>'+battle.pile.length+'</b>','pile')}
@@ -602,7 +611,7 @@ function overlayBody() {
     </div>`;
   if (overlay === 'rules') return `<h2>代償の遊び方</h2><p>HPを使うカードで、消費したHPと同じだけ代償がたまります。上限は6です。HPが0になるカードは使用できません。</p>
     <p>代償はターンをまたいで持ち越し、戦闘後は0に戻ります。回復や敵からの被害では増減しません。</p>
-    <p>「代償を消費」のカードは条件を満たすと自動で追加効果が出ます。ボスが大技を構えたら、そのターン中に必要ダメージを与えると中断できます。</p>`;
+    <p>「通常使用」は代償を温存します。「代償を使う」を選ぶと必要量を消費して追加効果が出ます。ボスが大技を構えたら、そのターン中に必要ダメージを与えると中断できます。</p>`;
   if (overlay === 'relics') {
     return `<h2>遺物 ${state.relics.length}/12</h2>`+paged(state.relics,4,id=>{
       const relic = DATA.relics[id];
@@ -623,6 +632,7 @@ function overlayBody() {
     const b = state.battle;
     return `<h2>深淵の呪術師</h2><p>HP ${state.hp} / ${state.maxHp} · ${state.gold}G · 防御 ${b.block}</p>
       <p>筋力 ${b.str} · 防御力 ${b.dex} · 毒 ${b.poison} · 弱体 ${b.weak}</p>
+      ${b.nextEnergy||b.nextBlock?`<p>次のターン：EN＋${b.nextEnergy||0} · 防御＋${b.nextBlock||0}</p>`:''}
       ${act('遺物を見る','relics')}${act('代償の遊び方','rules')}${royalEmberAction()}`;
   }
   if (['pile','discard','exhaust'].includes(overlay)) {
@@ -664,7 +674,7 @@ function render() {
   const scrollTop = tree ? root.querySelector('.ep2-tree-scroll')?.scrollTop : null;
   root.dataset.view = immersive ? (tree?'tree':state.screen) : 'normal';
   const chrome = immersive ? '' : `<header><div class="brand"><span>ABYSS CHRONICLE</span>
-    <small>${game?'第'+(state.chapter+1)+'章 · '+chapter().name:'深淵の記録 · Ver.0.77'}</small></div>
+    <small>${game?'第'+(state.chapter+1)+'章 · '+chapter().name:'深淵の記録 · Ver.0.78'}</small></div>
     ${game?act('☰','menu','','aria-label="メニュー"'):''}</header>${game?'<div class="status">'+bars()+'</div>':''}`;
   const battleDialog=game&&state.screen==='battle';
   root.innerHTML = `${chrome}<main>${content}</main>${notice?'<div role="status" class="notice">'+esc(notice)+'</div>':''}
@@ -759,7 +769,7 @@ root.addEventListener('click',async event=>{
     const already = selectedEnemy(state.battle)?.index===n;
     state.battle.target=n;
     if (already) {overlay='enemy-info';listPage=Math.max(0,state.battle.enemies.indexOf(selectedEnemy(state.battle)));}
-  } else if (action==='play') { if (play(state,index)) {index=-1;rewardTab='cards';} }
+  } else if (action==='play') { if (play(state,index,raw==='sacrifice')) {index=-1;rewardTab='cards';} }
   else if (action==='end-turn') { enemyTurn(state); index=-1; handPage=0; rewardTab='cards'; }
   else if (action==='advance') advanceNode(state);
   else if (action==='rest' && state.screen==='camp') {

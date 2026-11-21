@@ -341,8 +341,10 @@ function startTurn(state) {
   const battle = state.battle;
   battle.turn++;
   battle.spentDraw = false;
-  battle.energy = maxEnergy(state);
-  battle.block = battle.passiveBlock;
+  battle.energy = maxEnergy(state)+(battle.nextEnergy||0);
+  battle.block = battle.passiveBlock+(battle.nextBlock||0);
+  battle.nextEnergy=0;
+  battle.nextBlock=0;
   battle.chargeDamage = 0;
   if (battle.passiveHeal) heal(state,battle.passiveHeal);
   if (battle.turn === 1) {
@@ -397,26 +399,36 @@ function useRoyalEmber(state) {
   return true;
 }
 
-function projection(state, item, enemy = null) {
+function projection(state, item, enemy = null, useSacrifice = false) {
   const card = CARDS[item.id], battle = state.battle;
   const price = card.hp || 0;
   const available = battle ? Math.min(6,battle.price+price) : 0;
-  const spend = Boolean(card.spend && available >= card.spend);
+  const canSpend = Boolean(card.spend && available >= card.spend);
+  const spend = useSacrifice && canSpend;
+  const bonus = key => spend ? card[key]||0 : 0;
   const damage = (target) => {
     const base = card.hit || card.aoe || 0;
     if (!base) return 0;
-    const beforeStatus = base+(item.upgraded?3:0)+(battle?.str || 0)+(spend?(card.bonusHit||0):0);
+    const conditional = (target?.poison>0 ? card.poisonedHit||0 : 0)
+      + (target?.weak>0 ? card.weakenedHit||0 : 0);
+    const beforeStatus = base+(item.upgraded?3:0)+(battle?.str || 0)+bonus('bonusHit')+conditional;
     return Math.floor(Math.floor(beforeStatus*(battle?.weak>0?.75:1))*(target?.vuln>0?1.5:1));
   };
-  const block = card.block ? card.block+(item.upgraded?3:0)+(battle?.dex || 0)+(spend?(card.bonusBlock||0):0) : 0;
-  const recovery = card.heal ? card.heal+(item.upgraded?2:0)+(spend?(card.bonusHeal||0):0) : 0;
+  const block = card.block ? card.block+(item.upgraded?3:0)+(battle?.dex || 0)+bonus('bonusBlock') : 0;
+  const recovery = card.heal ? card.heal+(item.upgraded?2:0)+bonus('bonusHeal') : 0;
   return {
-    price, spend, damage:damage(enemy), damageFor:damage, block,
+    price, canSpend, spend, damage:damage(enemy), damageFor:damage, block,
     recovery, actualHeal:Math.min(recovery,state.maxHp-state.hp+price),
-    hits:card.hits||1, energy:spend?(card.bonusEnergy||0):0,
-    draw:(card.draw||0)+(card.draw && item.upgraded?1:0)+(spend?(card.bonusDraw||0):0),
-    allWeak:(card.allWeak||0)+(spend?(card.bonusAllWeak||0):0),
-    allVuln:(card.allVuln||0)+(spend?(card.bonusAllVuln||0):0)
+    hits:card.hits||1, energy:bonus('bonusEnergy'),
+    nextEnergy:(card.nextEnergy||0)+bonus('bonusNextEnergy'),
+    nextBlock:(card.nextBlock||0)+bonus('bonusNextBlock'),
+    draw:(card.draw||0)+(card.draw && item.upgraded?1:0)+bonus('bonusDraw'),
+    weak:(card.weak||0)+bonus('bonusWeak'),
+    vuln:(card.vuln||0)+bonus('bonusVuln'),
+    poison:(card.poison||0)+bonus('bonusPoison'),
+    allWeak:(card.allWeak||0)+bonus('bonusAllWeak'),
+    allVuln:(card.allVuln||0)+bonus('bonusAllVuln'),
+    allPoison:(card.allPoison||0)+bonus('bonusAllPoison')
   };
 }
 
@@ -435,15 +447,15 @@ function damageEnemy(enemy, amount, battle, bypass = false) {
   return lost;
 }
 
-function play(state, index) {
+function play(state, index, useSacrifice = false) {
   if (state.screen !== 'battle') return false;
   const battle = state.battle;
   const item = battle.hand[index];
   if (!item) return false;
   const card = CARDS[item.id];
   const enemy = selectedEnemy(battle);
-  const result = projection(state,item,enemy);
-  if (battle.energy < card.cost || state.hp <= result.price || !enemy) return false;
+  const result = projection(state,item,enemy,useSacrifice);
+  if (battle.energy < card.cost || state.hp <= result.price || !enemy || (useSacrifice && !result.canSpend)) return false;
   battle.hand.splice(index,1);
   battle.energy -= card.cost;
   state.hp -= result.price;
@@ -456,12 +468,13 @@ function play(state, index) {
     const perHit = result.damageFor(target);
     for (let hit=0; hit<result.hits && target.hp>0; hit++) dealt += damageEnemy(target,perHit,battle);
   }
-  enemy.weak += card.weak || 0;
-  enemy.vuln += card.vuln || 0;
-  enemy.poison += card.poison || 0;
+  enemy.weak += result.weak;
+  enemy.vuln += result.vuln;
+  enemy.poison += result.poison;
   for (const target of living) {
     target.weak += result.allWeak;
     target.vuln += result.allVuln;
+    target.poison += result.allPoison;
   }
   const healed = heal(state,result.recovery);
   battle.block += result.block;
@@ -471,6 +484,8 @@ function play(state, index) {
   battle.passiveHeal += (card.passiveHeal||0) + (card.passiveHeal && item.upgraded ? 1 : 0);
   battle.passiveBlock += (card.passiveBlock||0) + (card.passiveBlock && item.upgraded ? 2 : 0);
   battle.energy += result.energy;
+  battle.nextEnergy=(battle.nextEnergy||0)+result.nextEnergy;
+  battle.nextBlock=(battle.nextBlock||0)+result.nextBlock;
   addLog(battle,[card.name,dealt?dealt+'ダメージ':'',result.block?'防御+'+result.block:'',
     healed?'HP+'+healed:'',result.price?'HP−'+result.price:'',result.spend?'代償−'+card.spend:''].filter(Boolean).join(' · '));
   draw(battle,result.draw);
