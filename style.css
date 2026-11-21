@@ -127,3 +127,22 @@ html:has(.tap56),body.tap56{height:100%;min-height:0;overflow:hidden;overscroll-
 
 /* v0.61: region choice has a single pager, with cards and controls always together. */
 .paged-app56.hub61{grid-template-rows:auto minmax(0,1fr)}.hub61-shell{height:100%;min-height:0;display:grid;grid-template-rows:auto auto minmax(0,1fr);gap:6px;padding-bottom:8px}.hub61-heading{display:flex;justify-content:space-between;align-items:center;gap:6px}.hub61-heading h1{font-size:22px;color:#ead1a0;margin:3px 0}.hub61-heading button{font-size:11px;padding:5px 8px;min-height:36px}.hub61-shell .tabs56{margin:0}.hub61-regions{display:grid;grid-template-rows:auto minmax(0,1fr) auto auto;gap:7px;min-height:0}.hub61-regions>h2{font-size:17px;margin:4px 0;color:#e6c994}.hub61-regions .region56{grid-template-rows:repeat(2,minmax(0,1fr));min-height:0;gap:8px}.hub61-regions .region-card{min-height:0;padding:10px 12px;display:flex;flex-direction:column;justify-content:center;gap:5px;overflow-wrap:break-word}.hub61-regions .region-card h3{font-size:20px;margin:0;line-height:1.4}.hub61-regions .region-card p{font-size:14px;line-height:1.5;margin:0}.hub61-regions .region-card span,.hub61-regions .region-card small{font-size:12px;line-height:1.4}.hub61-regions .region56-nav{margin:0}.hub61-regions .region56-nav button{min-height:44px}.hub61-regions>p{margin:0;font-size:11px;line-height:1.5}@media(max-height:700px){.hub61-shell{gap:4px}.hub61-heading h1{font-size:19px}.hub61-shell .tabs56 button{min-height:36px;padding:6px 8px;font-size:12px}.hub61-regions{gap:5px}.hub61-regions .region-card{padding:7px 10px;gap:3px}.hub61-regions .region-card h3{font-size:17px}.hub61-regions .region-card p{font-size:12px}.hub61-regions .region-card span,.hub61-regions .region-card small{font-size:11px}}
+
+/* Keep long hand-card summaries inside their own grid row. */
+.b51-card .b52-effect {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  min-height: 0;
+  max-height: 100%;
+  box-sizing: border-box;
+  text-overflow: ellipsis;
+  align-self: stretch;
+}
+.b51-card > small {
+  min-height: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  align-self: stretch;
+}
