@@ -14,7 +14,7 @@ const shuffled = array => {
   return result;
 };
 const between = (x, low, high) => Number.isInteger(x) && x >= low && x <= high;
-const screenNames = ['story','map','battle','reward','camp','shop','event','treasure','trail','lost','ending'];
+const screenNames = ['hub','story','map','battle','reward','camp','shop','event','treasure','trail','lost','ending'];
 
 function maxEnergy(state) {
   return state.chapter >= 1 ? 5 : 4;
@@ -23,7 +23,7 @@ function maxEnergy(state) {
 function chapterStart(state) {
   Object.assign(state, {
     row: 0, lane: 1, screen: 'story', scene: 0, page: 0, path: [],
-    battle: null, reward: null, shop: null, event: null, treasure:null, traveler:null, prep:null
+    battle: null, reward: null, shop: null, event: null, treasure:null, traveler:null, prep:null, removals:0, tradeOffers:{}
   });
   state.expedition = makeExpedition(state);
   state.checkpoint = {
@@ -34,17 +34,18 @@ function chapterStart(state) {
 
 function createRun(difficulty, priorEnding) {
   const state = {
-    version: 1, chapter: 0, difficulty, priorEnding, hp: 72, maxHp: 72, gold: 80,
+    version: 1, chapter: 0, journey:{cleared:0,seen:[]}, difficulty, priorEnding, hp: 72, maxHp: 72, gold: 80,
     deck: STARTER.map(id => ({id, upgraded:false})), relics: [], wins: 0
   };
   chapterStart(state);
+  state.screen='hub';
   return state;
 }
 
 function validBuild(build) {
   return build && between(build.maxHp,72,500) && between(build.hp,0,build.maxHp)
-    && between(build.gold,0,1000000) && between(build.wins,0,120)
-    && Array.isArray(build.deck) && between(build.deck.length,8,240)
+    && between(build.gold,0,1000000) && between(build.wins,0,9999)
+    && Array.isArray(build.deck) && between(build.deck.length,8,999)
     && build.deck.every(item => item && Object.hasOwn(CARDS,item.id) && typeof item.upgraded === 'boolean')
     && Array.isArray(build.relics) && build.relics.every(n => between(n,0,11))
     && new Set(build.relics).size === build.relics.length;
@@ -67,7 +68,10 @@ function readRun(storage) {
           && battle[key].every(item => item && Object.hasOwn(CARDS,item.id)))
         || !Array.isArray(battle.log) || !between(battle.price,0,6)) return {state:null,corrupt:true};
     }
-    if (state.screen === 'reward' && !Array.isArray(state.reward?.cards)) return {state:null,corrupt:true};
+    if (state.screen==='reward' && (!Array.isArray(state.reward?.cards) ||
+      !state.reward.cards.every(id=>Object.hasOwn(CARDS,id)) ||
+      !(state.reward.relic==null || between(state.reward.relic,0,11)))) return {state:null,corrupt:true};
+    if (state.screen==='event' && !between(state.event,0,2)) return {state:null,corrupt:true};
     if (state.screen === 'shop' && !Array.isArray(state.shop?.cards)) return {state:null,corrupt:true};
     const migrated=state.expedition==null;
     if (migrated) {
@@ -80,12 +84,64 @@ function readRun(storage) {
     if (state.screen==='shop' && !state.shop.kind) {
       state.shop={...makeShop(state,'general'),...state.shop,prices:state.shop.cards.map(id=>({common:45,uncommon:65,rare:95}[CARDS[id].rarity])),services:['remove']};
     }
+    if (state.screen==='shop' && (!Object.hasOwn(SHOP_NAMES,state.shop.kind) ||
+      !Array.isArray(state.shop.prices) || state.shop.prices.length!==state.shop.cards.length ||
+      !state.shop.cards.every(id=>Object.hasOwn(CARDS,id)) || !state.shop.prices.every(price=>between(price,1,10000)) ||
+      !['services','used','relics'].every(key=>Array.isArray(state.shop[key])) ||
+      !state.shop.services.every(key=>Object.hasOwn(BASE_SERVICE_PRICES,key)) ||
+      !state.shop.relics.every(id=>between(id,0,11)) ||
+      (state.shop.costs && !Object.values(state.shop.costs).every(price=>between(price,1,10000))) ||
+      (state.shop.upgraded && !Array.isArray(state.shop.upgraded)))) return {state:null,corrupt:true};
     if (state.screen==='trail' && !Object.hasOwn(TRAVELERS,state.traveler)) return {state:null,corrupt:true};
     if (state.screen==='treasure' && !state.treasure?.every?.(id=>Object.hasOwn(CARDS,id))) return {state:null,corrupt:true};
-    return {state,migrated};
+    const journalMigrated=state.journey==null;
+    if (journalMigrated) state.journey=legacyJourney(state);
+    if (!validJourney(state.journey)) return {state:null,corrupt:true};
+    if (state.replay && (!validBuild(state.replay) || state.replay.screen!=='hub' ||
+      !validBuild(state.replay.checkpoint) || !between(state.replay.chapter,0,7) ||
+      !validExpedition(state.replay.expedition) || state.replay.replay)) return {state:null,corrupt:true};
+    return {state,migrated:migrated||journalMigrated};
   } catch {
     return {state:null,corrupt:true};
   }
+}
+
+function validJourney(journey) {
+  return between(journey?.cleared,0,8) && Array.isArray(journey.seen)
+    && journey.seen.length<=32 && new Set(journey.seen).size===journey.seen.length
+    && journey.seen.every(id=>between(id,0,31));
+}
+
+function legacyJourney(state) {
+  const cleared = state.screen==='ending'?8:state.chapter;
+  const seen = Array.from({length:cleared*4},(_,i)=>i);
+  if (cleared===8) return {cleared,seen};
+  const read = state.screen==='story'?state.scene:state.row===14?3:state.row>=6?2:1;
+  for (let i=0;i<read;i++) seen.push(state.chapter*4+i);
+  return {cleared,seen};
+}
+
+function departRegion(state, chapter) {
+  if (state.screen!=='hub' || !between(chapter,0,Math.min(7,state.journey.cleared))) return false;
+  if (chapter<state.journey.cleared) state.replay=clone(state);
+  state.chapter=chapter;
+  state.hp=state.maxHp;
+  chapterStart(state);
+  return true;
+}
+
+function reachHub(state, completed=false) {
+  if (state.replay) {
+    const snapshot=state.replay, journal=state.journey;
+    delete state.replay;
+    Object.assign(state,snapshot,{journey:journal});
+    return;
+  }
+  if (!completed) Object.assign(state,clone(state.checkpoint));
+  state.screen='hub';
+  state.hp=state.maxHp;
+  state.battle=null;state.reward=null;state.shop=null;state.event=null;state.treasure=null;state.traveler=null;state.prep=null;
+  state.path=[];state.row=0;state.lane=0;
 }
 
 function previousEnding(storage) {
@@ -143,14 +199,18 @@ function chooseNode(state, lane, balance) {
 
 function nextStory(state, balance) {
   if (state.page === 0) { state.page = 1; return; }
+  const sceneId=state.chapter*4+state.scene;
+  if (!state.journey.seen.includes(sceneId)) state.journey.seen.push(sceneId);
   if (state.scene === 2) { beginBattle(state,'boss',balance); return; }
   if (state.scene === 3) {
+    if (state.replay) { reachHub(state,true); return; }
+    state.journey.cleared=Math.max(state.journey.cleared,state.chapter+1);
     if (state.chapter === 7) { state.screen = 'ending'; return; }
     state.chapter++;
     state.maxHp += 5;
     state.hp = state.maxHp;
     state.gold += 35;
-    chapterStart(state);
+    reachHub(state,true);
     return;
   }
   state.screen = 'map';
@@ -169,6 +229,7 @@ function advanceNode(state) {
   state.event = null;
   state.treasure = null;
   state.traveler = null;
+  state.tradeOffers = {};
 }
 
 function retryChapter(state) {
@@ -249,7 +310,8 @@ function startTurn(state) {
   battle.chargeDamage = 0;
   if (battle.passiveHeal) heal(state,battle.passiveHeal);
   if (battle.turn === 1) {
-    battle.block += relicValue(state,'block') + (battle.prep==='mercenary'?10:0);
+    battle.block += relicValue(state,'block') + (battle.prep==='mercenary'?10:battle.prep==='guard'?12:0);
+    if (battle.prep==='tonic') battle.str++;
     battle.energy += relicValue(state,'energy');
   }
   draw(battle, 5 + (state.chapter >= 2 ? 1 : 0) + (battle.turn === 1 ? relicValue(state,'draw') + (battle.prep==='scout'?1:0) : 0));

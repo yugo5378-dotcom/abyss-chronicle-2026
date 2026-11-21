@@ -98,15 +98,45 @@ function availableLanes(state) {
   return previous==null ? routeLanes(state,state.row) : nextLanes(state,state.row-1,previous);
 }
 
+const POTIONS = {
+  small:{name:'小回復薬',desc:'購入時、HP15回復。',price:25,heal:15},
+  large:{name:'大回復薬',desc:'購入時、HP32回復。',price:50,heal:32},
+  detox:{name:'解毒の備え',desc:'次の戦闘で最初に受ける毒を無効化。',price:20,prep:'herbalist'},
+  guard:{name:'防御薬',desc:'次の戦闘開始時、防御+12。',price:30,prep:'guard'},
+  tonic:{name:'活力薬',desc:'次の戦闘中、筋力+1。',price:40,prep:'tonic'}
+};
+const BASE_SERVICE_PRICES = {heal:30,remove:55,upgrade:80,relic:160,trade:45,herbalist:25,scout:30,
+  ...Object.fromEntries(Object.entries(POTIONS).map(([id,potion])=>[id,potion.price]))};
+
 function makeShop(state,kind) {
-  const cards = whichCards('shop', {general:3,cards:6,forge:2,medicine:0,relic:0}[kind]);
-  const discount = kind==='general'?Math.floor(Math.random()*cards.length):-1;
-  const prices = cards.map((id,i)=>Math.round(({common:45,uncommon:65,rare:95}[CARDS[id].rarity])*(discount===i?.8:1)));
-  return {
-    kind,cards,prices,removed:false,
-    services:kind==='general'?shuffled(['heal','remove','upgrade','relic']).slice(0,2)
-      :kind==='cards'?[pick(['heal','remove'])]:kind==='forge'?['upgrade','trade']:kind==='medicine'?['heal','herbalist','scout']:['relic'],
-    used:[],
-    relics:shuffled(DATA.relics.map(r=>r.id).filter(id=>!state.relics.includes(id))).slice(0,3)
-  };
+  let cards=[], services=[];
+  const factor=pick([.9,1,1.1]);
+  if (kind==='general') {
+    cards=whichCards('shop',3);
+    services=shuffled(['small','remove','upgrade','relic']).slice(0,2);
+  } else if (kind==='cards') {
+    cards=['attack','defense','utility'].map(category=>pick(DATA.cards.filter(card=>card.category===category)).id);
+    cards.push(...shuffled(DATA.cards.filter(card=>!cards.includes(card.id))).slice(0,3).map(card=>card.id));
+    services=[pick(['small','remove'])];
+  } else if (kind==='forge') {
+    const offers=shuffled(['upgrade','trade','cards']).slice(0,2+Math.floor(Math.random()*2));
+    if (offers.includes('cards')) cards=whichCards('shop',1);
+    services=offers.filter(key=>key!=='cards');
+  } else if (kind==='medicine') {
+    const immediate=pick(['small','large']);
+    services=[immediate,...shuffled(Object.keys(POTIONS).filter(id=>id!==immediate)).slice(0,2)];
+  } else services=['relic'];
+  const upgraded=kind==='forge'?[...cards]:[];
+  const prices=cards.map(id=>Math.round({common:40,uncommon:65,rare:95}[CARDS[id].rarity]*factor)+(upgraded.includes(id)?40:0));
+  const costs={...BASE_SERVICE_PRICES,remove:75+(state.removals||0)*20};
+  if (kind==='general') {
+    const discount=Math.floor(Math.random()*(cards.length+services.length));
+    if (discount<cards.length) prices[discount]=Math.round(prices[discount]*.8);
+    else {
+      const key=services[discount-cards.length];
+      costs[key]=Math.round(costs[key]*.8);
+    }
+  }
+  return {kind,cards,prices,upgraded,costs,services,removed:false,used:[],
+    relics:shuffled(DATA.relics.map(r=>r.id).filter(id=>!state.relics.includes(id))).slice(0,kind==='general'?1:3)};
 }

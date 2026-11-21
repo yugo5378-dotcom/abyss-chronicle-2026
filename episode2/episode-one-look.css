@@ -256,3 +256,45 @@ body.episode-two #game {
 }
 .ep2-route-actions { gap: 5px; }
 .ep2-tree .parchment45 svg path.trail-done { opacity: 1; }
+
+#game[data-view="hub"] { max-width:620px;padding:0;gap:0; }
+.ep2-hub h1 { font-size:clamp(20px,5vw,28px); }
+.ep2-regions { flex:1; min-height:0; display:grid; grid-template-rows:repeat(2,minmax(0,1fr)); gap:6px; }
+.ep2-regions .region-card {
+  display:flex; flex-direction:column; justify-content:center; gap:4px;
+  padding:9px; min-height:0; color:#ecd8b2; border-radius:1px; border-color:#8f784b;
+  background:linear-gradient(135deg,#1e3141,#111e29); text-align:left;
+}
+.ep2-regions h3 { margin:0;font-size:clamp(15px,4.5vw,22px); }
+.ep2-regions .region-card :is(span,p,small) { font-size:clamp(10px,3vw,14px); line-height:1.34; margin:0; }
+.ep2-tabs { display:grid; grid-template-columns:repeat(var(--tabs),minmax(0,1fr)); gap:4px; }
+.ep2-tabs button {
+  min-width:0; min-height:33px; padding:4px; font-size:clamp(10px,3.4vw,14px);
+  color:#ead6af; background:linear-gradient(#29282b,#0b111b); border:1px solid #9c7d4d;
+  border-radius:2px; box-shadow:inset 0 0 0 2px #36302a; overflow-wrap:anywhere;
+}
+.ep2-tabs button[aria-pressed=true] { color:#fff0c9;background:linear-gradient(#987840,#443019); }
+.ep2-node-screen { justify-content:center; padding:12px; background:linear-gradient(#1d242bec,#0d121aee); }
+.ep2-node-screen > p { font-size:13px; }
+.ep2-after { color:#f2cd84; }
+.ep2-card-entry { position:relative; padding-right:42px; }
+.ep2-card-count { position:absolute;right:7px;top:5px;color:#eccb86;font-size:12px; }
+.ep2-journal-art { height:clamp(75px,21dvh,155px); background:var(--scene) center / cover; border:1px solid #a58556; }
+.ep2-battle-panel {
+  grid-template-rows: auto minmax(0,1fr);
+  padding-inline:12px;
+}
+.ep2-battle-panel-nav { display:flex; justify-content:flex-end; border-bottom:1px solid #8b714a; padding-bottom:6px; }
+.ep2-battle-panel .b51-panel-body { display:flex;flex-direction:column;gap:5px; }
+.ep2-battle-panel .b51-panel-body > p { margin:3px 0; }
+.ep2-battle-panel .b51-panel-body .ep2-tabs { flex-shrink:0; }
+.ep2-battle-panel .b51-detail-art { width:min(34dvh,135px)!important; }
+.ep2-battle-panel .page-row { margin:0; }
+.ep2-battle-panel .b51-menu { margin:5px 0; }
+.ep2-hub > .hint { margin:0; }
+@media (max-height:640px) {
+  .ep2-node-screen { gap:5px;padding:8px; }
+  .ep2-battle-panel .b51-panel-body { gap:3px; }
+  .ep2-battle-panel .b51-detail-art { width:90px!important;margin:4px auto; }
+  .ep2-battle-panel-nav button { min-height:34px; }
+}
