@@ -143,34 +143,53 @@ body.episode-two #game {
 }
 .ep2-pagination button { min-width: 66px; min-height: 34px; }
 .ep2-tree {
+  position: relative;
   height: 100%;
   display: grid;
-  grid-template-rows: auto auto minmax(0,1fr) auto auto;
-  gap: 7px;
+  grid-template-rows: auto auto minmax(0, 1fr) minmax(88px,17dvh) auto;
+  gap: 0;
   overflow: hidden;
   background: radial-gradient(ellipse at 50% 0%,#23313b,#0d111b 65%);
   border: 1px solid #9d8250;
-  padding: calc(7px + env(safe-area-inset-top)) 11px calc(7px + env(safe-area-inset-bottom));
+  padding: calc(10px + env(safe-area-inset-top)) 11px calc(5px + env(safe-area-inset-bottom));
 }
-.ep2-tree header { padding: 0 0 6px; }
-.ep2-tree-current { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: clamp(11px,3.6vw,15px); }
-.ep2-tree-current button { white-space: nowrap; font-size: 12px; }
-.ep2-paper {
-  border-radius: 10px;
-  overflow: hidden;
-  background: radial-gradient(ellipse at 40% 35%,#ead1a0,#c7ac7d 65%,#b89565);
-  box-shadow: inset 0 0 28px #62452655;
+.ep2-tree header { padding: 0 0 8px; min-height: 44px; }
+.ep2-tree h2 { color: #e4c58a; font-size: clamp(16px,4.1vw,23px); }
+.ep2-tree-current {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 3px; padding: 5px 0 0; font-size: clamp(11px,3.65vw,17px);
 }
-.ep2-paper svg { display: block; width: 100%; height: 100%; }
-.ep2-node circle { fill: #d3b886; stroke: #af915e; stroke-width: .75; }
-.ep2-node.current circle { stroke: #873d25; stroke-width: 2; fill: #edd39d; }
-.ep2-node.visited circle { stroke: #684a26; stroke-width: 2; }
-.ep2-node text { font-size: 9.5px; text-anchor: middle; fill: #50351d; }
-.ep2-node .ep2-node-mark { font: 17px system-ui,sans-serif; }
-.ep2-tree-step { font-size: 12px; fill: #5c4629; }
-.ep2-tree-links line { stroke: #8b744c; stroke-width: 1.4; stroke-dasharray: 3 5; }
-.ep2-tree-links .traveled { stroke: #873f25; stroke-width: 2.1; }
-.ep2-legend { padding: 2px 0; font-size: clamp(10px,3vw,13px); display: flex; flex-wrap: wrap; gap: 3px 8px; }
+.ep2-tree-current button { white-space: nowrap; font-size: 12px; min-height: 36px; padding-inline: 7px; }
+.ep2-tree .ep2-tree-scroll {
+  height: 100% !important;
+  min-height: 0;
+  margin: 0;
+  scrollbar-width: none;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  overscroll-behavior: contain;
+  touch-action: pan-y pinch-zoom !important;
+  -webkit-overflow-scrolling: touch;
+}
+.ep2-tree-scroll::-webkit-scrollbar { display: none; }
+.ep2-tree .parchment45 { position: relative; min-height: 0; }
+.ep2-tree .parchment45 svg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.ep2-tree .parchment45 svg path { opacity: .72; }
+.ep2-tree .parchment45 svg path.ep2-distant { opacity: .19; }
+.ep2-tree .parchment45 svg path.trail-next,.ep2-tree .parchment45 svg path.trail-done { opacity: 1; }
+.ep2-tree .route-map-node {
+  width: clamp(34px,11vw,52px);
+  min-height: clamp(34px,11vw,52px);
+  touch-action: pan-y pinch-zoom;
+}
+.ep2-tree .route-map-node.boss { width: clamp(49px,14vw,64px); min-height: clamp(46px,13vw,61px); }
+.ep2-tree .route-map-node.battle:not(.taken) {
+  background: radial-gradient(ellipse at 50% 0%,#d7c194 40%,#302820 77%,#101018 90%);
+}
+.ep2-tree .route-map-node.battle:not(.taken) b { color: #f0ddae; }
+.ep2-tree-below > button { margin-top: 8px; min-height: 36px; padding-inline: 7px; }
+.ep2-legend { margin-top: 6px; font-size: clamp(11px,3.65vw,16px); display: flex; flex-wrap: wrap; column-gap: 4px; }
+.ep2-tree-details { position: absolute; z-index: 5; inset: 0; display: grid; place-items: center; padding: 12px; background: #090b10a0; }
 .ep2-combat button { min-height: 0; touch-action: pinch-zoom; }
 .ep2-combat .b51-health button { min-height: 0; }
 .ep2-combat .b51-stage-top { left: 4px; right: 4px; gap: 4px; }

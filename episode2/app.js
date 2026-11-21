@@ -24,7 +24,7 @@ const eventOptions = [
 const caches = new Map();
 const storage = {getItem:key=>localStorage.getItem(key),setItem:(key,value)=>localStorage.setItem(key,value)};
 let {state,corrupt} = readRun(storage);
-let active = false, busy = false, overlay = '', index = -1, handPage = 0, listPage = 0, treePage = 0;
+let active = false, busy = false, overlay = '', index = -1, handPage = 0, listPage = 0, treeSelection = null;
 let notice = '', difficulty = state?.difficulty ?? 'standard';
 const esc = value => String(value).replace(/[&<>"']/g,x=>({
   '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
@@ -95,7 +95,7 @@ function story() {
 
 function routeTop() {
   return `<div class="ep2-route-top">
-    <div class="ep2-wordmark">ABYSS CHRONICLE<small>深淵の記録 · 第2話 · VER 0.72</small></div>
+    <div class="ep2-wordmark">ABYSS CHRONICLE<small>深淵の記録 · 第2話 · VER 0.73</small></div>
     <div class="ep2-hud">
       <span>♥ ${state.hp}/${state.maxHp}</span><span>◇ ${state.gold}G</span>
       ${act('デッキ '+state.deck.length,'deck')}${act('レリック '+state.relics.length,'relics')}
@@ -123,62 +123,72 @@ function mapScreen() {
   </section>`;
 }
 
-const TREE_ROWS = 5;
-const TREE_PAGES = Math.ceil(ROUTES.length / TREE_ROWS);
-const treeCurrentPage = () => TREE_PAGES-1-Math.floor(state.row/TREE_ROWS);
+const TREE_GAP = 83;
+const TREE_HEIGHT = 15*TREE_GAP+28;
+const treeY = row => 48+(ROUTES.length-1-row)*TREE_GAP;
 
-function treePoint(row,lane,first) {
+function treeX(row,lane) {
   const lanes = routeLanes(row);
-  const slot = lanes.indexOf(lane);
-  return {
-    x: lanes.length===1 ? 210 : 59+76*slot,
-    y: 48+(first+TREE_ROWS-1-row)*83
-  };
+  return lanes.length===1 ? 180 : 42+69*lanes.indexOf(lane);
 }
 
-function treeGraphic(first) {
-  const points = [], links = [];
-  for (let row=first;row<first+TREE_ROWS;row++) {
-    for (const lane of routeLanes(row)) {
-      const {x,y} = treePoint(row,lane,first);
-      const [icon,label] = nodes[ROUTES[row][lane]];
-      const visited = row===14 ? state.path.length===15 : state.path[row]===lane;
-      const current = row===state.row;
-      points.push(`<g class="ep2-node ${visited?'visited':''} ${current?'current':''}" aria-label="${row+1}段 ${label}">
-        <circle cx="${x}" cy="${y}" r="24"/><text x="${x}" y="${y-5}" class="ep2-node-mark">${icon}</text>
-        <text x="${x}" y="${y+13}">${label}</text></g>`);
-    }
-    const {y} = treePoint(row,routeLanes(row)[0],first);
-    points.push(`<text class="ep2-tree-step" x="13" y="${y+4}">${row+1}</text>`);
-    if (row===0) continue;
-    const previous = row-1;
-    const middle = y+41.5;
-    for (const lane of routeLanes(row)) {
-      const {x} = treePoint(row,lane,first);
-      const activeLink = row===state.row || row<state.row && state.path[row]===lane;
-      links.push(`<line class="${activeLink?'traveled':''}" x1="${x}" y1="${y+24}" x2="210" y2="${middle}"/>`);
-    }
-    for (const lane of routeLanes(previous)) {
-      const {x} = treePoint(previous,lane,first);
-      const activeLink = row<=state.row && state.path[previous]===lane;
-      links.push(`<line class="${activeLink?'traveled':''}" x1="210" y1="${middle}" x2="${x}" y2="${y+59}"/>`);
+function treeGraphic() {
+  const links = [];
+  for (let row=0;row<ROUTES.length-1;row++) {
+    const y = treeY(row), nextY = treeY(row+1);
+    for (const a of routeLanes(row)) {
+      for (const b of routeLanes(row+1)) {
+        const x = treeX(row,a), nextX = treeX(row+1,b);
+        const taken = state.path[row]===a && (state.path[row+1]===b || row+1===14 && state.path.length===15);
+        const current = row===state.row-1 && state.path[row]===a;
+        const style = taken?'trail-done':current?'trail-next':Math.abs(x-nextX)>75 && row+1!==14?'ep2-distant':'';
+        links.push(`<path d="M ${x} ${y} C ${x} ${y-31}, ${nextX} ${nextY+31}, ${nextX} ${nextY}" class="${style}"/>`);
+      }
     }
   }
-  return `<svg viewBox="0 0 420 428" role="img" aria-label="${first+1}〜${first+TREE_ROWS}段のルート">
-    <g class="ep2-tree-links">${links.join('')}</g>${points.join('')}</svg>`;
+  const rows = ROUTES.map((_,row)=>{
+    const markers = routeLanes(row).map(lane=>{
+      const kind = ROUTES[row][lane];
+      const [icon,label] = nodes[kind];
+      const visited = row===14 ? state.path.length===15 : state.path[row]===lane;
+      const current = row===state.row;
+      return act(`<span>${visited?'✓':icon}</span><b>${label}</b>`,'tree-node',row*5+lane,
+        `class="route-map-node ${kind} ${visited?'taken':''} ${current?'available':''} ${row<state.row&&!visited?'missed':''}"
+        style="left:${treeX(row,lane)/3.6}%" aria-label="${row+1}段目 ${label}${visited?' 通過済み':''}"`);
+    }).join('');
+    return `<div class="route-map-row ${row===state.row?'current-row':''}" style="top:${treeY(row)}px"><span class="route-step-label">${row+1}</span>${markers}</div>`;
+  }).join('');
+  return `<div class="route-map parchment45" style="height:${TREE_HEIGHT}px">
+    <svg viewBox="0 0 360 ${TREE_HEIGHT}" preserveAspectRatio="none" aria-hidden="true">${links.join('')}</svg>${rows}</div>`;
 }
 
 function treeScreen() {
-  const first = (TREE_PAGES-1-treePage)*TREE_ROWS;
+  const selection = treeSelection===null ? null : {
+    row:Math.floor(treeSelection/5),lane:treeSelection%5
+  };
+  const selected = selection && nodes[ROUTES[selection.row][selection.lane]];
   return `<section class="ep2-tree" role="dialog" aria-modal="true" aria-label="道の全体図">
     <header><h2>道の全体図</h2>${act('戻る ×','close','','class="ep2-gold"')}</header>
-    <div class="ep2-tree-current"><span>下から上へ · 点線が進める道</span>
+    <div class="ep2-tree-current"><span>下から上へ · 点線でつながる道だけ進めます</span>
       ${act('現在地へ','tree-current','','class="ep2-gold"')}</div>
-    <div class="ep2-paper">${treeGraphic(first)}</div>
-    <p class="ep2-legend">${Object.values(nodes).map(([icon,label])=>`<span>${icon} ${label}</span>`).join('')}</p>
-    <div class="ep2-pagination">${act('前へ','tree-page',-1,treePage===0?'disabled':'')}<span>${treePage+1} / ${TREE_PAGES}</span>
-      ${act('次へ','tree-page',1,treePage===TREE_PAGES-1?'disabled':'')}</div>
+    <div class="parchment-scroll45 route56-window ep2-tree-scroll" data-swipe-y
+      role="region" aria-label="全15段のルート" tabindex="0">${treeGraphic()}</div>
+    <div class="ep2-tree-below">
+      ${act('現在地','tree-current','','class="ep2-gold"')}
+      <p class="ep2-legend">${Object.values(nodes).map(([icon,label])=>`<span>${icon} ${label}</span>`).join('')}</p>
+    </div>
+    <div class="ep2-pagination">${act('前へ','noop','','disabled')}<span>1 / 1</span>${act('次へ','noop','','disabled')}</div>
+    ${selected?`<div class="ep2-tree-details"><section class="dialog" role="group" aria-label="地点の詳細">
+      ${act('閉じる','tree-detail-close','','class="close"')}
+      <h2>${selection.row+1}段目 · ${selected[1]}</h2><p>${selected[2]}</p>
+      <p>${selection.row===state.row?'ルート選択画面で進む道を選べます。':selection.row<state.row?'通過した段です。':'先の段です。'}</p>
+    </section></div>`:''}
   </section>`;
+}
+
+function focusTree() {
+  const scroller = root.querySelector('.ep2-tree-scroll');
+  if (scroller) scroller.scrollTop = treeY(state.row)-scroller.clientHeight*.55;
 }
 
 function intentText(enemy,battle) {
@@ -281,7 +291,7 @@ function battleScreen() {
   return `<section class="battle51 ep2-combat" aria-label="戦闘画面">
     <div class="b51-header">
       ${act('≡','menu','','aria-label="メニュー"')}
-      <div><b>ABYSS CHRONICLE</b><small>第${state.chapter+1}地域 · TURN ${battle.turn} · Ver.0.72</small></div>
+      <div><b>ABYSS CHRONICLE</b><small>第${state.chapter+1}地域 · TURN ${battle.turn} · Ver.0.73</small></div>
       ${act(state.gold+'G','battle-status','','aria-label="自分の状態と所持金"')}
     </div>
     <div class="b51-health">
@@ -425,13 +435,15 @@ function render() {
   const immersive = game && (tree || state.screen==='map' || state.screen==='battle');
   const content = !game ? home() : tree ? treeScreen() : state.screen==='story' ? story()
     : state.screen==='map' ? mapScreen() : state.screen==='battle' ? battleScreen() : nodeScreen();
+  const scrollTop = tree ? root.querySelector('.ep2-tree-scroll')?.scrollTop : null;
   root.dataset.view = immersive ? (tree?'tree':state.screen) : 'normal';
   const chrome = immersive ? '' : `<header><div class="brand"><span>ABYSS CHRONICLE</span>
-    <small>${game?'第'+(state.chapter+1)+'章 · '+chapter().name:'深淵の記録 · Ver.0.72'}</small></div>
+    <small>${game?'第'+(state.chapter+1)+'章 · '+chapter().name:'深淵の記録 · Ver.0.73'}</small></div>
     ${game?act('☰','menu','','aria-label="メニュー"'):''}</header>${game?'<div class="status">'+bars()+'</div>':''}`;
   root.innerHTML = `${chrome}<main>${content}</main>${notice?'<div role="status" class="notice">'+esc(notice)+'</div>':''}
     ${overlay&&!tree?`<div class="shade"><section class="dialog" role="dialog" aria-modal="true">
       ${act('閉じる','close','','class="close"')}${overlayBody()}</section></div>`:''}`;
+  if (tree && scrollTop!=null) root.querySelector('.ep2-tree-scroll').scrollTop = scrollTop;
 }
 
 function start() {
@@ -453,9 +465,10 @@ root.addEventListener('click',async event=>{
   else if (action === 'reset') start();
   else if (action === 'title') { overlay=''; active=false; }
   else if (action === 'close') overlay='';
-  else if (action === 'tree' && state?.screen==='map') { overlay='tree'; treePage=treeCurrentPage(); }
-  else if (action === 'tree-page' && overlay==='tree') treePage=Math.max(0,Math.min(TREE_PAGES-1,treePage+n));
-  else if (action === 'tree-current' && overlay==='tree') treePage=treeCurrentPage();
+  else if (action === 'tree' && state?.screen==='map') { overlay='tree'; treeSelection=null; }
+  else if (action === 'tree-current' && overlay==='tree') { focusTree(); return; }
+  else if (action === 'tree-node' && overlay==='tree' && routeLanes(Math.floor(n/5)).includes(n%5)) treeSelection=n;
+  else if (action === 'tree-detail-close' && overlay==='tree') treeSelection=null;
   else if (['menu','deck','relics','log','rules','card-info','upgrade','remove','journey',
     'battle-status','enemy-info','pile','discard','exhaust'].includes(action)) {
     overlay=action; listPage=0;

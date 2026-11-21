@@ -13,3 +13,10 @@ body.episode-two,
 body.episode-two :is(button, a, .dialog) {
   touch-action: pinch-zoom;
 }
+
+/* The map is the only area that uses native vertical scrolling. */
+body.episode-two:has([data-swipe-y]),
+body.episode-two [data-swipe-y],
+body.episode-two [data-swipe-y] button {
+  touch-action: pan-y pinch-zoom;
+}

@@ -12,7 +12,7 @@ document.addEventListener('touchstart', event => {
     return;
   }
   const touch = event.touches[0];
-  touchOrigin = {x:touch.clientX,y:touch.clientY};
+  touchOrigin = {x:touch.clientX,y:touch.clientY,scrollY:!!event.target?.closest?.("[data-swipe-y]")};
   suppressTap = false;
 }, {capture:true,passive:true});
 
@@ -22,7 +22,7 @@ document.addEventListener('touchmove', event => {
   if (Math.hypot(touch.clientX-touchOrigin.x,touch.clientY-touchOrigin.y) >= tapRadius) {
     suppressTap = true;
   }
-  if (suppressTap && event.cancelable) event.preventDefault();
+  if (suppressTap && !touchOrigin.scrollY && event.cancelable) event.preventDefault();
 }, {capture:true,passive:false});
 
 document.addEventListener('touchcancel', () => {
