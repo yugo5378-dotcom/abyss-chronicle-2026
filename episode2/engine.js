@@ -22,7 +22,7 @@ function maxEnergy(state) {
 
 function chapterStart(state) {
   Object.assign(state, {
-    row: 0, lane: 1, screen: 'story', scene: 0, page: 0, path: [],
+    row: 0, lane: 1, screen: 'story', scene: 0, page: 0, path: [], routeNotes:{},
     battle: null, reward: null, shop: null, event: null, treasure:null, traveler:null, prep:null, removals:0, tradeOffers:{}
   });
   state.expedition = makeExpedition(state);
@@ -92,6 +92,9 @@ function readRun(storage) {
       !state.shop.relics.every(id=>between(id,0,11)) ||
       (state.shop.costs && !Object.values(state.shop.costs).every(price=>between(price,1,10000))) ||
       (state.shop.upgraded && !Array.isArray(state.shop.upgraded)))) return {state:null,corrupt:true};
+    if (state.routeNotes && !validRouteNotes(state.routeNotes)) state.routeNotes={};
+    if (state.lastExpedition && !validExpeditionRecord(state.lastExpedition)) delete state.lastExpedition;
+    if (state.replay?.lastExpedition && !validExpeditionRecord(state.replay.lastExpedition)) delete state.replay.lastExpedition;
     if (state.screen==='trail' && !Object.hasOwn(TRAVELERS,state.traveler)) return {state:null,corrupt:true};
     if (state.screen==='treasure' && !state.treasure?.every?.(id=>Object.hasOwn(CARDS,id))) return {state:null,corrupt:true};
     const journalMigrated=state.journey==null;
@@ -130,18 +133,49 @@ function departRegion(state, chapter) {
   return true;
 }
 
-function reachHub(state, completed=false) {
+function noteRoute(state, note) {
+  if (!note || state.path[state.row]==null) return;
+  state.routeNotes ??= {};
+  const notes=state.routeNotes[state.row] ??= [];
+  if (notes.length<10) notes.push(note.slice(0,100));
+}
+
+function expeditionRecord(state) {
+  return {
+    chapter:state.chapter,
+    stops:state.path.map((lane,row)=>({
+      row, kind:state.expedition.rows[row][lane], shop:state.expedition.shops[row][lane],
+      notes:state.routeNotes?.[row] ?? []
+    }))
+  };
+}
+
+function validRouteNotes(notes) {
+  return notes!=null && typeof notes==='object' && !Array.isArray(notes)
+    && Object.entries(notes).every(([row,values])=>/^(?:[0-9]|1[0-4])$/.test(row)&&validStopNotes(values));
+}
+function validStopNotes(values) {
+  return Array.isArray(values) && values.length<=10 && values.every(note=>typeof note==='string'&&note.length<=100);
+}
+function validExpeditionRecord(record) {
+  return between(record?.chapter,0,7)&&Array.isArray(record.stops)&&record.stops.length<=15
+    && record.stops.every(stop=>between(stop?.row,0,14)&&ROUTE_KINDS.includes(stop.kind)
+      && (stop.shop===null||Object.hasOwn(SHOP_NAMES,stop.shop))&&validStopNotes(stop.notes));
+}
+
+function reachHub(state, completed=false, record=expeditionRecord(state)) {
+  const lastExpedition=record.stops.length?record:state.lastExpedition;
   if (state.replay) {
     const snapshot=state.replay, journal=state.journey;
     delete state.replay;
-    Object.assign(state,snapshot,{journey:journal});
+    Object.assign(state,snapshot,{journey:journal,lastExpedition});
     return;
   }
   if (!completed) Object.assign(state,clone(state.checkpoint));
   state.screen='hub';
   state.hp=state.maxHp;
   state.battle=null;state.reward=null;state.shop=null;state.event=null;state.treasure=null;state.traveler=null;state.prep=null;
-  state.path=[];state.row=0;state.lane=0;
+  state.path=[];state.row=0;state.lane=0;state.routeNotes={};state.lastExpedition=lastExpedition;
 }
 
 function previousEnding(storage) {
@@ -206,17 +240,19 @@ function nextStory(state, balance) {
     if (state.replay) { reachHub(state,true); return; }
     state.journey.cleared=Math.max(state.journey.cleared,state.chapter+1);
     if (state.chapter === 7) { state.screen = 'ending'; return; }
+    const record=expeditionRecord(state);
     state.chapter++;
     state.maxHp += 5;
     state.hp = state.maxHp;
     state.gold += 35;
-    reachHub(state,true);
+    reachHub(state,true,record);
     return;
   }
   state.screen = 'map';
 }
 
-function advanceNode(state) {
+function advanceNode(state,note) {
+  noteRoute(state,note);
   if (state.row === 14) {
     state.screen = 'story'; state.scene = 3; state.page = 0;
   } else {
@@ -507,6 +543,7 @@ function checkWin(state) {
   const remaining = DATA.relics.filter(relic=>!state.relics.includes(relic.id));
   const relic = (elite||bossFight) && remaining.length ? pick(remaining) : null;
   if (relic) earnRelic(state,relic.id);
+  noteRoute(state,'勝利 · '+gold+'G · HP+'+recovered+(relic?' · '+relic.name:''));
   state.reward = {gold,recovered,relic:relic?.id??null,cards:whichCards(battle.type,3)};
   state.battle = null;
   state.screen = 'reward';

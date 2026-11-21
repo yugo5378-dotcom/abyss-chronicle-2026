@@ -100,7 +100,7 @@ function hubScreen() {
       ${act('デッキを見る','deck')}${act('レリックを見る','relics')}`
     :`<p>読んだ物語を場面ごとに読み返せます。</p>${act('物語を読み返す','journal')}`;
   return `<section class="ep2-route ep2-hub">
-    ${routeTop()}<h1>灯火の宿営地</h1>
+    ${routeTop()}<div class="map56-heading"><h1>灯火の宿営地</h1>${state.lastExpedition?act('直前の記録','journey','','class="ep2-gold"'):''}</div>
     ${tabs([['regions','地域'],['deck','デッキ・レリック'],['story','物語・探索']],hubTab,'hub-tab')}
     ${content}<p class="hint">拠点で全回復。敗北・撤退時は出発前の状態へ戻ります。</p>
   </section>`;
@@ -175,10 +175,12 @@ function cardRewardPanel() {
   const list=state.screen==='treasure'?state.treasure:state.reward.cards;
   const id=list[selectionIndex],card=CARDS[id];
   const owns=state.deck.filter(item=>item.id===id);
-  const similar=grouped(state.deck.filter(item=>item.id!==id && CARDS[item.id].category===card.category)).slice(0,2);
+  const exact=grouped(owns);
+  const compare=exact.length?exact:grouped(state.deck.filter(item=>CARDS[item.id].category===card.category)).slice(0,2);
   return `<h2>受け取るカードを確認</h2><div class="entry">${cardLine({id,upgraded:false})}</div>
     <p>所持 ${owns.length}枚（強化済み ${owns.filter(i=>i.upgraded).length}枚）</p>
-    ${similar.length?`<p class="hint">同じ分類の所持カード</p>${similar.map(({item})=>'<div class="entry">'+cardLine(item)+'</div>').join('')}`:''}
+    ${compare.length?`<p class="hint">${exact.length?'同名の所持カード':'同じ分類の所持カード'}</p>
+      ${compare.map(({item,count})=>`<div class="entry ep2-card-entry">${cardLine(item)}<span class="ep2-card-count">×${count}</span></div>`).join('')}`:''}
     ${act('このカードを受け取る','reward-accept','',primary)}`;
 }
 
@@ -200,7 +202,7 @@ function story() {
 
 function routeTop() {
   return `<div class="ep2-route-top">
-    <div class="ep2-wordmark">ABYSS CHRONICLE<small>深淵の記録 · 第2話 · VER 0.76</small></div>
+    <div class="ep2-wordmark">ABYSS CHRONICLE<small>深淵の記録 · 第2話 · VER 0.77</small></div>
     <div class="ep2-hud">
       <span>♥ ${state.hp}/${state.maxHp}</span><span>◇ ${state.gold}G</span>
       ${act('デッキ '+state.deck.length,'deck')}${act('レリック '+state.relics.length,'relics')}
@@ -399,7 +401,7 @@ function battleScreen() {
     <div class="b51-header">
       ${act(royalEmberStatus(state)&&!battle.royalEmberUsed?'≡ ✦':'≡','menu','',
         'aria-label="メニュー'+(royalEmberStatus(state)&&!battle.royalEmberUsed?'・王の残火あり':'')+'"')}
-      <div><b>ABYSS CHRONICLE</b><small>第${state.chapter+1}地域 · TURN ${battle.turn} · Ver.0.76</small></div>
+      <div><b>ABYSS CHRONICLE</b><small>第${state.chapter+1}地域 · TURN ${battle.turn} · Ver.0.77</small></div>
       ${act(state.gold+'G','battle-status','','aria-label="自分の状態と所持金"')}
     </div>
     <div class="b51-health">
@@ -607,9 +609,16 @@ function overlayBody() {
       return `<div class="entry"><strong>${relic.name}</strong><small>${relic.desc}</small></div>`;
     });
   }
-  if (overlay === 'journey') return `<h2>目的・道中の記録</h2>
-    <p>第${state.chapter+1}地域「${esc(chapter().name)}」</p><p>目的：${esc(chapter().boss)}を倒す</p>
-    <p>到達：${state.row+1} / 15段　通算勝利：${state.wins}</p>`;
+  if (overlay==='journey') {
+    const atHub=state.screen==='hub';
+    const record=atHub?state.lastExpedition:expeditionRecord(state);
+    const region=DATA.chapters[record?.chapter ?? state.chapter];
+    const stops=[...(record?.stops ?? [])].reverse();
+    return `<h2>${atHub?'直前の記録':'目的・道中の記録'}</h2><p>${esc(region.name)} · 目的：${esc(region.boss)}を倒す</p>
+      ${atHub?'':`<p>到達 ${state.row+1}/15段 · 通算 ${state.wins}勝</p>`}
+      ${paged(stops,2,stop=>`<div class="entry"><strong>${stop.row+1}段 · ${nodes[stop.kind][0]} ${stop.shop?SHOP_NAMES[stop.shop]:nodes[stop.kind][1]}</strong>
+        <small>${esc(stop.notes.join(' ／ ') || '選択した道')}</small></div>`)}`;
+  }
   if (overlay === 'battle-status') {
     const b = state.battle;
     return `<h2>深淵の呪術師</h2><p>HP ${state.hp} / ${state.maxHp} · ${state.gold}G · 防御 ${b.block}</p>
@@ -655,7 +664,7 @@ function render() {
   const scrollTop = tree ? root.querySelector('.ep2-tree-scroll')?.scrollTop : null;
   root.dataset.view = immersive ? (tree?'tree':state.screen) : 'normal';
   const chrome = immersive ? '' : `<header><div class="brand"><span>ABYSS CHRONICLE</span>
-    <small>${game?'第'+(state.chapter+1)+'章 · '+chapter().name:'深淵の記録 · Ver.0.76'}</small></div>
+    <small>${game?'第'+(state.chapter+1)+'章 · '+chapter().name:'深淵の記録 · Ver.0.77'}</small></div>
     ${game?act('☰','menu','','aria-label="メニュー"'):''}</header>${game?'<div class="status">'+bars()+'</div>':''}`;
   const battleDialog=game&&state.screen==='battle';
   root.innerHTML = `${chrome}<main>${content}</main>${notice?'<div role="status" class="notice">'+esc(notice)+'</div>':''}
@@ -726,7 +735,7 @@ root.addEventListener('click',async event=>{
   else if (action==='reward-preview' && ['reward','treasure'].includes(state.screen)) {selectionIndex=n;overlay='reward-preview';}
   else if (action==='reward-accept' && overlay==='reward-preview') {
     const list=state.screen==='treasure'?state.treasure:state.reward?.cards;
-    if (list?.[selectionIndex]) {state.deck.push({id:list[selectionIndex],upgraded:false});overlay='';advanceNode(state);}
+    if (list?.[selectionIndex]) {state.deck.push({id:list[selectionIndex],upgraded:false});overlay='';advanceNode(state,CARDS[list[selectionIndex]].name+'を入手');}
   }
   else if (action === 'node' || action === 'story-next') {
     busy=true;
@@ -753,7 +762,10 @@ root.addEventListener('click',async event=>{
   } else if (action==='play') { if (play(state,index)) {index=-1;rewardTab='cards';} }
   else if (action==='end-turn') { enemyTurn(state); index=-1; handPage=0; rewardTab='cards'; }
   else if (action==='advance') advanceNode(state);
-  else if (action==='rest' && state.screen==='camp') { heal(state,Math.max(15,Math.round(state.maxHp*.30))); advanceNode(state); }
+  else if (action==='rest' && state.screen==='camp') {
+    const restored=heal(state,Math.max(15,Math.round(state.maxHp*.30)));
+    advanceNode(state,'休息 · HP+'+restored);
+  }
   else if (action==='shop-page' && state.screen==='shop') shopPage=Math.max(0,shopPage+n);
   else if (action==='service' && state.screen==='shop' && canUseService(raw)) {
     if (['remove','upgrade','trade','relic'].includes(raw)) { overlay=raw==='relic'?'relic-shop':raw;listPage=0; }
@@ -765,15 +777,15 @@ root.addEventListener('click',async event=>{
       else state.prep=potion?.prep ?? raw;
     }
   } else if (action==='buy-relic' && state.screen==='shop' && canUseService('relic') && state.shop.relics.includes(n)) {
-    useService('relic'); earnRelic(state,n); overlay='';
+    useService('relic'); earnRelic(state,n); noteRoute(state,DATA.relics[n].name+'を購入'); overlay='';
   } else if (action==='upgrade-card' && overlay==='upgrade-confirm' && n===selectionIndex && state.deck[n] && !state.deck[n].upgraded) {
     if (state.screen==='camp' || state.screen==='shop' && canUseService('upgrade')) {
-      state.deck[n].upgraded=true; overlay='';
+      state.deck[n].upgraded=true; noteRoute(state,CARDS[state.deck[n].id].name+'を強化'); overlay='';
       if (state.screen==='camp') advanceNode(state); else useService('upgrade');
     }
   } else if (action==='remove-card' && overlay==='remove-confirm' && n===selectionIndex && state.deck[n] && state.deck.length>8) {
     if (state.screen==='camp' || state.screen==='shop' && canUseService('remove')) {
-      state.deck.splice(n,1); overlay='';
+      noteRoute(state,CARDS[state.deck[n].id].name+'を削除'); state.deck.splice(n,1); overlay='';
       if (state.screen==='camp') advanceNode(state);
       else { useService('remove'); state.shop.removed=true; state.removals=(state.removals||0)+1; }
     }
@@ -781,15 +793,15 @@ root.addEventListener('click',async event=>{
     const id = state.shop.cards[n], price = state.shop.prices[n];
     if (id && state.gold>=price) {
       state.gold-=price; state.deck.push({id,upgraded:state.shop.upgraded?.includes(id)??false});
-      state.shop.cards.splice(n,1); state.shop.prices.splice(n,1);
+      state.shop.cards.splice(n,1); state.shop.prices.splice(n,1); noteRoute(state,CARDS[id].name+'を購入 · '+price+'G');
     }
   } else if (action==='treasure-gold' && state.screen==='treasure') {
-    state.gold+=40+state.chapter*5; advanceNode(state);
+    const gold=40+state.chapter*5;state.gold+=gold;advanceNode(state,'金貨 '+gold+'Gを入手');
   } else if (action==='trail-trade' && state.screen==='trail') {
     const traveler = TRAVELERS[state.traveler];
     if (state.traveler==='trader') { overlay='trade'; listPage=0; }
     else if (!state.prep && state.gold>=traveler.price) {
-      state.gold-=traveler.price; state.prep=state.traveler; advanceNode(state);
+      state.gold-=traveler.price; state.prep=state.traveler; advanceNode(state,traveler.name+'と取引');
     }
   } else if (action==='trade-preview' && state.deck[n] &&
     (state.screen==='trail' && state.traveler==='trader' || state.screen==='shop' && canUseService('trade'))) {
@@ -800,9 +812,11 @@ root.addEventListener('click',async event=>{
   } else if (action==='trade-card' && overlay==='trade-preview' && state.deck[selectionIndex] &&
     state.tradeOffers[state.deck[selectionIndex].id]?.includes(raw) &&
     (state.screen==='trail' && state.traveler==='trader' || state.screen==='shop' && canUseService('trade'))) {
+    noteRoute(state,CARDS[state.deck[selectionIndex].id].name+' → '+CARDS[raw].name+'に交換');
     state.deck[selectionIndex]={id:raw,upgraded:false}; overlay='';
     if (state.screen==='trail') advanceNode(state); else useService('trade');
-  } else if (action==='event' && state.screen==='event') {
+  } else if (action==='event' && state.screen==='event' && between(n,0,1)) {
+    const event=eventOptions[state.event]; noteRoute(state,event.title+' · '+event.options[n]);
     if (state.event===0) { if (n===0) heal(state,12); else state.gold+=35; }
     if (state.event===1) {
       if (n===0 && state.hp>5) {state.hp-=5;state.gold+=55;}
