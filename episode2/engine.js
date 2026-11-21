@@ -16,14 +16,37 @@ const shuffled = array => {
 const between = (x, low, high) => Number.isInteger(x) && x >= low && x <= high;
 const screenNames = ['story','map','battle','reward','camp','shop','event','lost','ending'];
 
+// Columns 0–2 keep their original meaning for saves from Ver.0.70–0.71.
+const ROUTES = [
+  ['battle','battle','battle','battle','battle'],
+  ['battle','event','battle','battle','event'],
+  ['battle','battle','event','battle','battle'],
+  ['elite','camp','battle','battle','event'],
+  ['battle','battle','battle','battle','battle'],
+  ['battle','event','battle','battle','battle'],
+  ['shop','camp','elite','battle','event'],
+  ['battle','battle','battle','battle','battle'],
+  ['battle','elite','event','battle','battle'],
+  ['battle','camp','battle','battle','event'],
+  ['battle','battle','shop','battle','battle'],
+  ['elite','battle','event','battle','battle'],
+  ['battle','battle','battle','battle','battle'],
+  ['camp','camp','camp','shop','battle'],
+  ['boss','boss','boss']
+];
+
 function routeMap() {
-  return [
-    ['battle','battle','battle'], ['battle','event','battle'], ['battle','battle','event'],
-    ['elite','camp','battle'], ['battle','battle','battle'], ['battle','event','battle'],
-    ['shop','camp','elite'], ['battle','battle','battle'], ['battle','elite','event'],
-    ['battle','camp','battle'], ['battle','battle','shop'], ['elite','battle','event'],
-    ['battle','battle','battle'], ['camp','camp','camp'], ['boss','boss','boss']
-  ];
+  return ROUTES;
+}
+
+function routeLanes(row) {
+  if (!between(row,0,ROUTES.length-1)) return [];
+  if (row===ROUTES.length-1) return [1];
+  return row===6 ? [3,4,1,0,2] : [3,0,1,2,4];
+}
+
+function maxEnergy(state) {
+  return state.chapter >= 1 ? 5 : 4;
 }
 
 function chapterStart(state) {
@@ -61,10 +84,10 @@ function readRun(storage) {
     if (!state) return {state:null};
     if (state.version !== 1 || !validBuild(state) || !validBuild(state.checkpoint)
       || !['standard','veteran'].includes(state.difficulty) || !['dawn','watch','unknown'].includes(state.priorEnding)
-      || !between(state.chapter,0,7) || !between(state.row,0,14) || !between(state.lane,0,2)
+      || !between(state.chapter,0,7) || !between(state.row,0,14) || !between(state.lane,0,4)
       || !between(state.scene,0,3) || !between(state.page,0,1) || !screenNames.includes(state.screen)
       || !Array.isArray(state.path) || state.path.length>15
-      || !state.path.every(n => between(n,0,2))) return {state:null, corrupt:true};
+      || !state.path.every((n,row) => between(n,0,ROUTES[row].length-1))) return {state:null, corrupt:true};
     if (state.screen === 'battle') {
       const battle = state.battle;
       if (!battle || !Array.isArray(battle.enemies) || !battle.enemies.some(enemy => enemy.hp>0)
@@ -115,7 +138,7 @@ function whichCards(kind, count) {
 }
 
 function chooseNode(state, lane, balance) {
-  if (state.screen !== 'map' || !between(lane,0,2) || Math.abs(lane - state.lane) > 1) return false;
+  if (state.screen !== 'map' || !routeLanes(state.row).includes(lane)) return false;
   const kind = routeMap()[state.row][lane];
   state.lane = lane;
   state.path.push(lane);
@@ -230,7 +253,7 @@ function startTurn(state) {
   const battle = state.battle;
   battle.turn++;
   battle.spentDraw = false;
-  battle.energy = 4 + (state.chapter >= 1 ? 1 : 0);
+  battle.energy = maxEnergy(state);
   battle.block = battle.passiveBlock;
   battle.chargeDamage = 0;
   if (battle.passiveHeal) heal(state,battle.passiveHeal);
