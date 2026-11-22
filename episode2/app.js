@@ -202,7 +202,7 @@ function story() {
 
 function routeTop() {
   return `<div class="ep2-route-top">
-    <div class="ep2-wordmark">ABYSS CHRONICLE<small>深淵の記録 · 第2話 · VER 0.81</small></div>
+    <div class="ep2-wordmark">ABYSS CHRONICLE<small>深淵の記録 · 第2話 · VER 0.82</small></div>
     <div class="ep2-hud">
       <span>♥ ${state.hp}/${state.maxHp}</span><span>◇ ${state.gold}G</span>
       ${act('デッキ '+state.deck.length,'deck')}${act('レリック '+state.relics.length,'relics')}
@@ -343,7 +343,7 @@ function details(item, battle = null) {
   if (f.block) lines.push('防御 '+f.block);
   if (f.recovery) lines.push('HP回復 '+(battle?f.actualHeal+' / 最大'+f.recovery:f.recovery));
   if (f.energy) lines.push('このターンのEN +'+f.energy);
-  if (f.price) lines.push('HP消費 '+f.price+'、代償 +'+(battle?Math.min(6-battle.price,f.price):f.price));
+  if (f.price) lines.push('HP消費 '+f.price+(card.spend?'、通常使用時のみ代償 +':'、代償 +')+(battle?Math.min(6-battle.price,f.price):f.price));
   if (card.poisonedHit) lines.push('毒状態の敵にダメージ+'+card.poisonedHit);
   if (card.weakenedHit) lines.push('弱体状態の敵にダメージ+'+card.weakenedHit);
   if (card.spend) {
@@ -413,7 +413,7 @@ function battleScreen() {
     <div class="b51-header">
       ${act(royalEmberStatus(state)&&!battle.royalEmberUsed?'≡ ✦':'≡','menu','',
         'aria-label="メニュー'+(royalEmberStatus(state)&&!battle.royalEmberUsed?'・王の残火あり':'')+'"')}
-      <div><b>ABYSS CHRONICLE</b><small>第${state.chapter+1}地域 · TURN ${battle.turn} · Ver.0.81</small></div>
+      <div><b>ABYSS CHRONICLE</b><small>第${state.chapter+1}地域 · TURN ${battle.turn} · Ver.0.82</small></div>
       ${act(state.gold+'G','battle-status','','aria-label="自分の状態と所持金"')}
     </div>
     <div class="b51-health">
@@ -615,9 +615,9 @@ function overlayBody() {
     ${act('第2話タイトルへ','title')}<a class="button" href="../">話数選択へ</a>
     ${act('代償の遊び方','rules')}${act('デッキを見る','deck')}${act('遺物を見る','relics')}${act('セーブを書き出す','save-export')}
     </div>`;
-  if (overlay === 'rules') return `<h2>代償の遊び方</h2><p>HPを使うカードで、消費したHPと同じだけ代償がたまります。上限は6です。HPが0になるカードは使用できません。</p>
+  if (overlay === 'rules') return `<h2>代償の遊び方</h2><p>HPを使うカードを通常使用すると、消費したHPと同じだけ代償がたまります。上限は6です。HPが0になるカードは使用できません。</p>
     <p>代償はターンをまたいで持ち越し、戦闘後は0に戻ります。回復や敵からの被害では増減しません。</p>
-    <p>「通常使用」は代償を温存します。「代償を使う」を選ぶと必要量を消費して追加効果が出ます。ボスが大技を構えたら、そのターン中に必要ダメージを与えると中断できます。</p>`;
+    <p>「代償を使う」は、使用前に必要量がたまっていると選べます。その分を消費して追加効果が発動し、この使用で支払ったHPは代償に加算されません。ボスが大技を構えたら、そのターン中に必要ダメージを与えると中断できます。</p>`;
   if (overlay === 'relics') {
     return `<h2>遺物 ${state.relics.length}/12</h2>`+paged(state.relics,4,id=>{
       const relic = DATA.relics[id];
@@ -680,7 +680,7 @@ function render() {
   const scrollTop = tree ? root.querySelector('.ep2-tree-scroll')?.scrollTop : null;
   root.dataset.view = immersive ? (tree?'tree':state.screen) : 'normal';
   const chrome = immersive ? '' : `<header><div class="brand"><span>ABYSS CHRONICLE</span>
-    <small>${game?'第'+(state.chapter+1)+'章 · '+chapter().name:'深淵の記録 · Ver.0.81'}</small></div>
+    <small>${game?'第'+(state.chapter+1)+'章 · '+chapter().name:'深淵の記録 · Ver.0.82'}</small></div>
     ${game?act('☰','menu','','aria-label="メニュー"'):''}</header>${game?'<div class="status">'+bars()+'</div>':''}`;
   const battleDialog=game&&state.screen==='battle';
   root.innerHTML = `${chrome}<main>${content}</main>${notice?'<div role="status" class="notice">'+esc(notice)+'</div>':''}

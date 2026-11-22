@@ -411,7 +411,7 @@ function useRoyalEmber(state) {
 function projection(state, item, enemy = null, useSacrifice = false) {
   const card = CARDS[item.id], battle = state.battle;
   const price = card.hp || 0;
-  const available = battle ? Math.min(6,battle.price+price) : 0;
+  const available = battle?.price ?? 0;
   const canSpend = Boolean(card.spend && available >= card.spend);
   const spend = useSacrifice && canSpend;
   const bonus = key => spend ? card[key]||0 : 0;
@@ -468,8 +468,7 @@ function play(state, index, useSacrifice = false) {
   battle.hand.splice(index,1);
   battle.energy -= card.cost;
   state.hp -= result.price;
-  battle.price = Math.min(6,battle.price+result.price);
-  if (result.spend) battle.price -= card.spend;
+  battle.price = result.spend ? battle.price-card.spend : Math.min(6,battle.price+result.price);
   const living = battle.enemies.filter(e=>e.hp>0);
   const targets = card.aoe ? living : [enemy];
   let dealt = 0;
