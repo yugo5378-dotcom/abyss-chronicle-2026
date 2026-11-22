@@ -423,7 +423,8 @@ function projection(state, item, enemy = null, useSacrifice = false) {
     const beforeStatus = base+(item.upgraded?3:0)+(battle?.str || 0)+bonus('bonusHit')+conditional;
     return Math.floor(Math.floor(beforeStatus*(battle?.weak>0?.75:1))*(target?.vuln>0?1.5:1));
   };
-  const block = card.block ? card.block+(item.upgraded?3:0)+(battle?.dex || 0)+bonus('bonusBlock') : 0;
+  const baseBlock = card.block ? card.block+(item.upgraded?3:0)+(battle?.dex || 0) : 0;
+  const block = baseBlock+bonus('bonusBlock');
   const recovery = card.heal ? card.heal+(item.upgraded?2:0)+bonus('bonusHeal') : 0;
   return {
     price, canSpend, spend, damage:damage(enemy), damageFor:damage, block,
