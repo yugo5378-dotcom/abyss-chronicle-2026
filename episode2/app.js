@@ -202,7 +202,7 @@ function story() {
 
 function routeTop() {
   return `<div class="ep2-route-top">
-    <div class="ep2-wordmark">ABYSS CHRONICLE<small>深淵の記録 · 第2話 · VER 0.80</small></div>
+    <div class="ep2-wordmark">ABYSS CHRONICLE<small>深淵の記録 · 第2話 · VER 0.81</small></div>
     <div class="ep2-hud">
       <span>♥ ${state.hp}/${state.maxHp}</span><span>◇ ${state.gold}G</span>
       ${act('デッキ '+state.deck.length,'deck')}${act('レリック '+state.relics.length,'relics')}
@@ -413,7 +413,7 @@ function battleScreen() {
     <div class="b51-header">
       ${act(royalEmberStatus(state)&&!battle.royalEmberUsed?'≡ ✦':'≡','menu','',
         'aria-label="メニュー'+(royalEmberStatus(state)&&!battle.royalEmberUsed?'・王の残火あり':'')+'"')}
-      <div><b>ABYSS CHRONICLE</b><small>第${state.chapter+1}地域 · TURN ${battle.turn} · Ver.0.80</small></div>
+      <div><b>ABYSS CHRONICLE</b><small>第${state.chapter+1}地域 · TURN ${battle.turn} · Ver.0.81</small></div>
       ${act(state.gold+'G','battle-status','','aria-label="自分の状態と所持金"')}
     </div>
     <div class="b51-health">
@@ -680,7 +680,7 @@ function render() {
   const scrollTop = tree ? root.querySelector('.ep2-tree-scroll')?.scrollTop : null;
   root.dataset.view = immersive ? (tree?'tree':state.screen) : 'normal';
   const chrome = immersive ? '' : `<header><div class="brand"><span>ABYSS CHRONICLE</span>
-    <small>${game?'第'+(state.chapter+1)+'章 · '+chapter().name:'深淵の記録 · Ver.0.80'}</small></div>
+    <small>${game?'第'+(state.chapter+1)+'章 · '+chapter().name:'深淵の記録 · Ver.0.81'}</small></div>
     ${game?act('☰','menu','','aria-label="メニュー"'):''}</header>${game?'<div class="status">'+bars()+'</div>':''}`;
   const battleDialog=game&&state.screen==='battle';
   root.innerHTML = `${chrome}<main>${content}</main>${notice?'<div role="status" class="notice">'+esc(notice)+'</div>':''}
