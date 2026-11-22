@@ -17,7 +17,7 @@ const between = (x, low, high) => Number.isInteger(x) && x >= low && x <= high;
 const screenNames = ['hub','story','map','battle','reward','camp','shop','event','treasure','trail','lost','ending'];
 
 const BASE_ENERGY = 3;
-const EARLY_CHAPTER_ENEMY_ATTACK = 1.10;
+const EARLY_CHAPTER_ATTACK = {battle:1.25, elite:1.25, boss:1.10};
 
 function chapterStart(state) {
   Object.assign(state, {
@@ -308,7 +308,7 @@ function addLog(battle, message) {
 
 function beginBattle(state, type, balance) {
   const battle = state.battle = {
-    enemyAttackMultiplier:state.chapter < 6 ? EARLY_CHAPTER_ENEMY_ATTACK : 1,
+    enemyAttackMultiplier:state.chapter < 6 ? EARLY_CHAPTER_ATTACK[type] : 1,
     type, enemies:formation(state,type,balance), escort:balance.escort ?? null, escortSummoned:false,
     staggerNeed:balance.stagger ?? 18, chargeDamage:0, nextEnemy:3,
     turn:0, price:0, energy:0, block:0, poison:0, weak:0,
