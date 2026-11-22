@@ -16,9 +16,7 @@ const shuffled = array => {
 const between = (x, low, high) => Number.isInteger(x) && x >= low && x <= high;
 const screenNames = ['hub','story','map','battle','reward','camp','shop','event','treasure','trail','lost','ending'];
 
-function maxEnergy(state) {
-  return state.chapter >= 1 ? 5 : 4;
-}
+const BASE_ENERGY = 3;
 
 function chapterStart(state) {
   Object.assign(state, {
@@ -349,7 +347,7 @@ function startTurn(state) {
   const battle = state.battle;
   battle.turn++;
   battle.spentDraw = false;
-  battle.energy = maxEnergy(state)+(battle.nextEnergy||0);
+  battle.energy = BASE_ENERGY+(battle.nextEnergy||0);
   battle.block = battle.passiveBlock+(battle.nextBlock||0);
   battle.nextEnergy=0;
   battle.nextBlock=0;
